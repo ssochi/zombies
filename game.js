@@ -74,7 +74,8 @@ let cameraX=0,cameraY=0,cameraVX=0,cameraVY=0,killFlash=0,headshotMarker=false;
 // rawTime never stalls during hit-stop so screen shake keeps oscillating; slowMo is the wave-clear beat.
 let rawTime=0,slowMo=0,hurtFlash=0,killFlashHead=false,lastKillTime=-9,killStreak=0,packLeft=0;
 // KNOCKDOWN_ENABLED stays off while characters.js has no lying pose (original art style).
-const KNOCKDOWN_ENABLED=false,KNOCK_MAX=420,KNOCKDOWN_SPEED=300,AIR_GRAVITY=420,ATTACK_TOTAL=.72;
+// HIT_STOP_ENABLED=false: hits and kills no longer freeze time (user found the stutter unpleasant).
+const HIT_STOP_ENABLED=false,KNOCKDOWN_ENABLED=false,KNOCK_MAX=420,KNOCKDOWN_SPEED=300,AIR_GRAVITY=420,ATTACK_TOTAL=.72;
 function cameraLead(){try{if(typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width:600px)').matches)return 110;}catch{}return CAMERA_LEAD;}
 let best=0,soundEnabled=true,audioCtx=null;
 let stats={shots:0,hits:0,headshots:0,severed:0};
@@ -368,7 +369,7 @@ function updateBullets(dt){
 function update(rawDt){
   if(state==='ready'){worldTime+=rawDt;for(const z of zombies){z.phase+=rawDt*.75;z.pose=makeZombiePose(z);}return;}
   if(state!=='playing')return;
-  let dt=rawDt;if(hitStop>0){hitStop=Math.max(0,hitStop-rawDt);dt*=.12;}
+  let dt=rawDt;if(hitStop>0){hitStop=Math.max(0,hitStop-rawDt);if(HIT_STOP_ENABLED)dt*=.12;}
   if(slowMo>0){slowMo=Math.max(0,slowMo-rawDt);dt*=.25;}
   elapsed+=rawDt;rawTime+=rawDt;worldTime+=dt;shotCooldown=Math.max(0,shotCooldown-rawDt);muzzle=Math.max(0,muzzle-rawDt);hitMarker=Math.max(0,hitMarker-rawDt);killFlash=Math.max(0,killFlash-rawDt);hurtFlash=Math.max(0,hurtFlash-rawDt);
   shake=Math.max(0,shake-rawDt*11);player.inv=Math.max(0,player.inv-dt);
