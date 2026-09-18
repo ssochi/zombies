@@ -170,3 +170,29 @@ function drawSpecialProjectiles(c, layer = 'all') {
   }
   c.restore();
 }
+// Death hooks called by killZombie before the body rig is built. api carries the effect helpers
+// (bloodBurst, sever, textParticle, addDecal, emit, dir, headPoint); return punch overrides or null.
+function onSpecialDeath(z, api = {}) {
+  const dir = api.dir || 0, x = z.x, y = z.y, head = api.headPoint || (z.pose && z.pose.head) || {x, y: y - 40};
+  if (z.kind === 'brute') {
+    // Tyrant: tear off both arms and the head, then the torso flies. Bigger burst, longer freeze.
+    if (typeof api.sever === 'function') {
+      for (const part of ['armL', 'armR']) if (!z.missing[part]) api.sever(z, part, dir + (part === 'armL' ? -.4 : .4), 2.4);
+      if (!z.missing.head) { api.sever(z, 'head', dir, 2.8); }
+    }
+    if (typeof api.bloodBurst === 'function') api.bloodBurst(head.x, head.y + 8, dir, y, 46, 1.7, {up: 90, chunks: true});
+    if (typeof api.textParticle === 'function') api.textParticle(head.x, head.y - 24, 'TYRANT DOWN', '#ffb09a', 11);
+    if (api.sound) api.sound('fall', x);
+    return {hitStop: .16, shake: 5, killFlash: .26};
+  }
+  if (z.kind === 'spitter') {
+    // Acid sac ruptures: a green splash that stains the road.
+    for (let i = 0; i < 12; i++) if (api.emit) api.emit({kind: 'blood', x: head.x + (Math.random() - .5) * 6, y: head.y + 10,
+      vx: Math.cos(dir) * 30 + (Math.random() - .5) * 120, vy: -40 - Math.random() * 70, life: .7 + Math.random() * .5,
+      size: 1 + Math.random() * 2.2, color: i % 3 ? '#abc449' : '#d2db74', gravity: 200, drag: .5, floor: y + (Math.random() - .5) * 6});
+    if (typeof api.addDecal === 'function') for (let i = 0; i < 7; i++) api.addDecal(x + (Math.random() - .5) * 30, y + (Math.random() - .5) * 6, 2 + Math.random() * 4, '#6d913e');
+    if (api.sound) api.sound('acid', x);
+    return {hitStop: .09, shake: 2.4};
+  }
+  return null;
+}

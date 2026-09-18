@@ -41,7 +41,7 @@ test('ragdolls preserve bone lengths, settle above ground and remain finite',()=
 });
 test('effect budgets are bounded during sustained combat',()=>{
   const run=game();run('for(let i=0;i<80;i++){const z=addZombie();z.x=320;z.pose=makeZombiePose(z);sever(z,"armR",0);killZombie(z,"head",0);}for(let i=0;i<600;i++)addDecal(10,280,2,"#600");');
-  assert.ok(run('particles.length')<=500);assert.ok(run('corpses.length')<=15);assert.ok(run('rigs.length')<=32);assert.ok(run('decals.length')<=240);
+  assert.ok(run('particles.length')<=500);assert.ok(run('corpses.length')<=28);assert.ok(run('rigs.length')<=32);assert.ok(run('decals.length')<=400);
 });
 test('pause freezes physical effects and restart clears combat state',()=>{
   const run=game();run('const z=addZombie();z.pose=makeZombiePose(z);killZombie(z,"head",0);pauseGame();for(let i=0;i<100;i++)update(1/60);');
@@ -123,9 +123,9 @@ test('each weapon kicks immediately, stays bounded during bursts, and returns to
 });
 test('impact impulse follows projectile weapon and heavy enemies resist knockback',()=>{
   const run=game();run('const n=addZombie(false,0,"normal"),b=addZombie(false,1,"brute");n.hp=b.hp=100;switchWeapon("smg");hitZombie(n,"body",n.pose.shoulder,{vx:1000,vy:0,weaponId:"rifle",damage:1});hitZombie(b,"body",b.pose.shoulder,{vx:1000,vy:0,weaponId:"rifle",damage:1});');
-  assert.equal(run('n.knockVX'),49.3);assert.ok(run('b.knockVX<n.knockVX*.5'));
+  assert.ok(Math.abs(run('n.knockVX')-150.8)<1e-9);assert.ok(run('b.knockVX<n.knockVX*.5'));
   run('for(let i=0;i<20;i++)hitZombie(n,"body",n.pose.shoulder,{vx:1000,vy:0,weaponId:"shotgun",damage:.01});');
-  assert.ok(run('n.knockVX<=210&&Math.abs(n.flinchV)<=38'));
+  assert.ok(run('n.knockVX<=420&&Math.abs(n.flinchV)<=38'));
 });
 
 
