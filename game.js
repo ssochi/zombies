@@ -9,16 +9,15 @@ const H = 330, PLAYER_SCALE = 1, WORLD_LENGTH = 6400;
 // Smaller actors: ~20% of frame height so 10-14 zombies fit on screen (They Are Coming framing).
 const LANE_TOP = 246, LANE_BOTTOM = 312;
 const ROUTE_START = 142, EXTRACTION_X = 6292, ROUTE_METERS = (EXTRACTION_X - ROUTE_START) / 10;
-const $ = id => document.getElementById(id);
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const rand = (min, max) => min + Math.random() * (max - min);
 // Dynamic logical width: W = round(H * viewportAspect) clamped to [640, 1280] and kept even, so a 16:9 or wider
 // screen fills edge to edge while portrait phones keep the classic 640 frame (bars top/bottom).
 function measureViewport(){
+  // The page is canvas-only, so the window itself is the viewport.
   let w=NaN,h=NaN;
-  try{const box=typeof document!=='undefined'&&document.getElementById?document.getElementById('viewport'):null;if(box){w=box.clientWidth;h=box.clientHeight;}}catch{}
   const ok=(v)=>typeof v==='number'&&Number.isFinite(v)&&v>0;
-  if(!(ok(w)&&ok(h))){try{if(typeof window!=='undefined'){w=window.innerWidth;h=window.innerHeight;}}catch{}}
+  try{if(typeof window!=='undefined'){w=window.innerWidth;h=window.innerHeight;}}catch{}
   return ok(w)&&ok(h)?{w,h}:null;
 }
 function resizeGame(){
@@ -102,7 +101,8 @@ function cameraLead(){try{if(typeof window!=='undefined'&&window.matchMedia&&win
 let best=0,soundEnabled=true,audioCtx=null;
 let stats={shots:0,hits:0,headshots:0,severed:0};
 try{best=Number(localStorage.getItem('last-light-best'))||0;}catch{}
-$('best').textContent=String(best).padStart(3,'0');
+// All UI-facing state lives here; ui.js draws it inside the canvas (the page has no other DOM).
+const HUD={mode:'等待部署',status:'向东突围 · 每个区域边界提供补给',waveStatus:'保持警戒',notice:'',killPulse:0,panel:{tag:'四个区域。一条撤离路线。',title:'穿过这片死地。',copy:'向东突围，沿途补给。注意疾行者、重装暴君与腐液。',button:'开始生存',hint:'WASD 移动 · 左键攻击 · 1–5 / Q 切换武器'}};
 resizeGame();
 if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){window.addEventListener('resize',resizeGame);window.addEventListener('orientationchange',resizeGame);}
 if(typeof document!=='undefined'&&typeof document.addEventListener==='function')document.addEventListener('fullscreenchange',()=>{resizeGame();if(typeof requestAnimationFrame==='function')requestAnimationFrame(resizeGame);});
@@ -111,7 +111,7 @@ function playerMuzzle(){
   const art=makePlayerPose(),g=art.gun,raw=g.face===1?g.angle:Math.PI-g.angle,angle=Math.atan2(Math.sin(raw),Math.cos(raw));
   return{x:g.origin.x+Math.cos(angle)*getWeapon().barrelLength*PLAYER_SCALE,y:g.origin.y+Math.sin(angle)*getWeapon().barrelLength*PLAYER_SCALE,angle,origin:g.origin};
 }
-function announce(message,duration=2){$('notice').textContent=message;noticeTime=duration;}
+function announce(message,duration=2){HUD.notice=message;noticeTime=duration;}
 function addZombie(preview=false,index=0,forcedKind){
   const y=preview?LANE_TOP+(index%4)*17:rand(LANE_TOP,LANE_BOTTOM);
   const z={x:preview?384+Math.floor(index/4)*77+(index%4)*23:(wave>1&&Math.random()<.24?viewX-rand(35,95):viewX+W+rand(30,90)),y,type:preview?index%8:Math.floor(rand(0,8)),scale:.8+(y-LANE_TOP)/400,speed:preview?28:(rand(12,18)+wave*1.15)*2*1.18,phase:rand(0,TAU),hp:5.5+Math.min(6,(wave-1)*.65),hit:0,attack:rand(.2,.7),attackTime:0,attackDone:false,face:-1,dead:false,missing:{},wounds:[],limbHits:{},crawling:false,flinch:0,flinchV:0,knockVX:0,knockVY:0,pose:null,
@@ -121,26 +121,26 @@ function addZombie(preview=false,index=0,forcedKind){
 }
 for(let i=0;i<12;i++)addZombie(true,i);
 player.pose=makePlayerPose().pose;
-function saveBest(){if(kills>best){best=kills;$('best').textContent=String(best).padStart(3,'0');try{localStorage.setItem('last-light-best',best);}catch{}}}
-function beginWave(){spawnLeft=12+wave*6;spawnTimer=.1;packLeft=Math.floor(rand(3,6));waveBreak=0;shake=Math.max(shake,3.5);cameraVY-=70;announce(`第 ${String(wave).padStart(2,'0')} 波 · 尸潮来袭`,2.6);$('wave-status').textContent='尸潮来袭';}
+function saveBest(){if(kills>best){best=kills;try{localStorage.setItem('last-light-best',best);}catch{}}}
+function beginWave(){spawnLeft=12+wave*6;spawnTimer=.1;packLeft=Math.floor(rand(3,6));waveBreak=0;shake=Math.max(shake,3.5);cameraVY-=70;announce(`第 ${String(wave).padStart(2,'0')} 波 · 尸潮来袭`,2.6);HUD.waveStatus='尸潮来袭';}
 function startGame(){
   resizeGame();initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
   keys.clear();pointer.down=false;touchFiring=false;triggerLatched=false;zombies=[];bullets=[];particles=[];corpses=[];pickups=[];rigs=[];decals=[];physicsAccumulator=0;
   elapsed=0;kills=0;wave=1;meleeSwing=null;triggerLatched=false;shotCooldown=0;reloadTime=0;shake=0;hitStop=0;muzzle=0;shotSerial=0;cameraX=cameraY=cameraVX=cameraVY=0;killFlash=0;slowMo=0;hurtFlash=0;lastKillTime=-9;killStreak=0;
   stats={shots:0,hits:0,headshots:0,severed:0};
-  player.ammo=getWeapon().magSize;player.reserve=getWeapon().reserve;state='playing';$('overlay').classList.add('hidden');$('mode-label').textContent='战区实时';$('bottom-status').textContent='向东突围 → · 1–5 切换武器 · 断脚＋断手可定身';$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');
+  player.ammo=getWeapon().magSize;player.reserve=getWeapon().reserve;state='playing';HUD.mode='战区实时';HUD.status='向东突围 → · 1–5 切换武器 · 断脚＋断手可定身';
   beginWave();for(let i=0;i<6;i++){const z=addZombie(false,i,i===2?'runner':'normal');z.x=455+i*40+(i%2)*14;z.pose=makeZombiePose(z);spawnLeft--;}
   player.pose=makePlayerPose().pose;updateHUD();canvas.focus({preventScroll:true});
 }
 function pauseGame(){
   if(state==='ready'||state==='over'||state==='won')return;pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();
   if(state==='playing'){
-    state='paused';$('overlay').classList.remove('hidden');$('panel-tag').textContent='喘口气，检查弹匣。';$('panel-title').textContent='行动已暂停';$('panel-copy').textContent='战区已冻结。准备好后，继续守住公路。';$('start').querySelector('span').textContent='继续行动';$('start-hint').textContent='按 ESC 或点击继续';$('mode-label').textContent='行动暂停';$('pause').textContent='▷';$('pause').setAttribute('aria-label','继续游戏');
+    state='paused';Object.assign(HUD.panel,{tag:'喘口气，检查弹匣。',title:'行动已暂停',copy:'战区已冻结。准备好后，继续守住公路。',button:'继续行动',hint:'按 ESC 或点击继续'});HUD.mode='行动暂停';
   }else{
-    state='playing';$('overlay').classList.add('hidden');$('mode-label').textContent='战区实时';$('pause').textContent='Ⅱ';$('pause').setAttribute('aria-label','暂停游戏');canvas.focus({preventScroll:true});
+    state='playing';HUD.mode='战区实时';canvas.focus({preventScroll:true});
   }
 }
-function gameOver(){state='over';pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();saveBest();$('overlay').classList.remove('hidden');$('panel-tag').textContent='信号丢失 · 行动结束';$('panel-title').textContent='这一枪，还不算终点。';$('panel-copy').textContent=`坚持 ${formatTime(elapsed)} · 击杀 ${kills} · 爆头 ${stats.headshots} · 断肢 ${stats.severed}`;$('start').querySelector('span').textContent='再次突围';$('start-hint').textContent=`最佳纪录 ${best} 击杀 · 按 ENTER 重新开始`;$('mode-label').textContent='信号丢失';$('bottom-status').textContent='行动结束。整装，再次出发。';}
+function gameOver(){state='over';pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();saveBest();Object.assign(HUD.panel,{tag:'信号丢失 · 行动结束',title:'这一枪，还不算终点。',copy:`坚持 ${formatTime(elapsed)} · 击杀 ${kills} · 爆头 ${stats.headshots} · 断肢 ${stats.severed}`,button:'再次突围',hint:`最佳纪录 ${best} 击杀 · 按 ENTER 重新开始`});HUD.mode='信号丢失';HUD.status='行动结束。整装，再次出发。';}
 function reload(automatic=false){
   if(state!=='playing'||getWeapon().melee||reloadTime>0||player.ammo===getWeapon().magSize)return;
   if(player.reserve<=0){if(shotCooldown<=0){announce('弹药不足 · 寻找补给',1.5);sound('empty');shotCooldown=.5;}return;}
@@ -224,7 +224,7 @@ function killZombie(z,part,dir,weaponId=z.lastWeaponId){
   // Kill streak: chained kills within 1.4 s stack a counter over the body.
   killStreak=elapsed-lastKillTime<1.4?killStreak+1:1;lastKillTime=elapsed;
   if(killStreak>=2)textParticle(headPoint.x,headPoint.y-26,`x${killStreak}`,killStreak>=5?'#ff7a4a':'#ffd58a',9+Math.min(4,killStreak));
-  try{const counter=$('kills');counter.classList.remove('pulse');void counter.offsetWidth;counter.classList.add('pulse');}catch{}
+  HUD.killPulse=.16;
   if(kills%5===0)pickups.push({x:clamp(z.x,22,WORLD_LENGTH-22),y:z.y,type:kills%10===0?'health':'ammo',life:25});
   // Last body of a wave: brief slow motion (separate from hit-stop) so the final fling plays out.
   if(spawnLeft<=0&&zombies.every(o=>o.dead)){slowMo=.9;killFlash=Math.max(killFlash,.3);shake=Math.max(shake,3);}
@@ -258,34 +258,17 @@ function hitZombie(z,part,point,bullet){
 }
 function textWidth(t){try{const m=ctx.measureText(t);return m&&Number.isFinite(m.width)?m.width:t.length*5.5;}catch{return t.length*5.5;}}
 function formatTime(t){return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
-function updateHUD(){
-  $('health').innerHTML=`${Math.ceil(player.hp)} <span>/ 100</span>`;$('health-bar').style.width=`${player.hp}%`;$('health-bar').style.background=player.hp<30?'#c2402a':'#a9c25b';$('stamina-bar').style.width=`${player.stamina}%`;
-  $('ammo').textContent=getWeapon().melee?String(Math.floor(player.stamina)):String(player.ammo).padStart(2,'0');$('ammo').style.color=(getWeapon().melee?player.stamina<16:player.ammo<6)?'#e06a3c':'';$('ammo').nextElementSibling.textContent=getWeapon().melee?'体力':`/ ${player.reserve}`;
-  const ticks=$('ammo-ticks');if(ticks&&ticks.style&&ticks.style.setProperty)ticks.style.setProperty('--fill',String(clamp(getWeapon().melee?player.stamina/100:player.ammo/Math.max(1,getWeapon().magSize),0,1)));const magSize=$('mag-size');if(magSize)magSize.textContent=getWeapon().melee?'体力':String(getWeapon().magSize);
-  $('reload-key').style.visibility=getWeapon().melee?'hidden':'visible';$('touch-fire').textContent=getWeapon().melee?'挥击':getWeapon().semiAuto?'点射':'开火';$('touch-reload').disabled=Boolean(getWeapon().melee);$('touch-reload').style.opacity=getWeapon().melee?'.35':'1';$('kills').textContent=String(kills).padStart(3,'0');$('wave').textContent=String(wave).padStart(2,'0');$('time').textContent=formatTime(elapsed);
-  $('reload-label').textContent=reloadTime>0?`换弹中 · ${reloadTime.toFixed(1)}s`:getWeapon().label;
-  const sector=getWorldSector(player.x);
-  $('sector-name').textContent=sector.name;
-  $('sector-code').textContent=`SECTOR ${sector.code}`;
-  $('route-distance').textContent=`${Math.floor(clamp((furthestX-ROUTE_START)/10,0,ROUTE_METERS))} / ${ROUTE_METERS} m`;
-  $('route-progress').style.width=`${clamp((furthestX-ROUTE_START)/(EXTRACTION_X-ROUTE_START),0,1)*100}%`;
-  for(const button of document.querySelectorAll('[data-weapon]')){
-    const active=button.dataset.weapon===selectedWeapon;
-    button.classList.toggle('selected',active);button.setAttribute('aria-pressed',String(active));
-    const stash=active?player:weaponInventory[button.dataset.weapon];button.querySelector('.weapon-count').textContent=WEAPONS[button.dataset.weapon].melee?'16 体力 / 次':`${stash.ammo} / ${stash.reserve}`;
-  }
-}
+// The HUD is drawn by ui.js straight from game state (player, kills, wave, elapsed, HUD, ...); nothing to sync here.
+function updateHUD(){}
 function victory(){
   state='won';pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();saveBest();
-  $('overlay').classList.remove('hidden');$('panel-tag').textContent='撤离信号确认 · 行动完成';$('panel-title').textContent='你穿过了死线。';
-  $('panel-copy').textContent=`穿越四个区域 · 击杀 ${kills} · 用时 ${formatTime(elapsed)}`;
-  $('start').querySelector('span').textContent='再次出发';$('start-hint').textContent='按 ENTER 重新开始';$('mode-label').textContent='撤离成功';
+  Object.assign(HUD.panel,{tag:'撤离信号确认 · 行动完成',title:'你穿过了死线。',copy:`穿越四个区域 · 击杀 ${kills} · 用时 ${formatTime(elapsed)}`,button:'再次出发',hint:'按 ENTER 重新开始'});HUD.mode='撤离成功';
 }
 function updateJourney(){
   for(const stop of [1480,3010,4660])if(player.x>=stop&&!claimedSupplyStops.has(stop)){
     claimedSupplyStops.add(stop);supplyAmmo(2);player.hp=Math.min(100,player.hp+25);announce(`${getWorldSector(stop+50).name} · 补给已获取`,2.7);sound('pickup');
   }
-  if(!evacuation&&furthestX>nextEncounterX){wave++;spawnLeft+=5+Math.min(wave,8);waveBreak=0;nextEncounterX+=750;spawnTimer=.2;$('wave-status').textContent='增援逼近';announce('前方出现新的尸群',2);}
+  if(!evacuation&&furthestX>nextEncounterX){wave++;spawnLeft+=5+Math.min(wave,8);waveBreak=0;nextEncounterX+=750;spawnTimer=.2;HUD.waveStatus='增援逼近';announce('前方出现新的尸群',2);}
   if(!evacuation&&player.x>=EXTRACTION_X){evacuation=true;spawnLeft=Math.min(spawnLeft,5);announce('抵达撤离点 · 清空最后尸群',3);}
   if(evacuation&&!spawnLeft&&!zombies.length)victory();
 }
@@ -400,7 +383,8 @@ function update(rawDt){
   elapsed+=rawDt;rawTime+=rawDt;worldTime+=dt;shotCooldown=Math.max(0,shotCooldown-rawDt);muzzle=Math.max(0,muzzle-rawDt);hitMarker=Math.max(0,hitMarker-rawDt);killFlash=Math.max(0,killFlash-rawDt);hurtFlash=Math.max(0,hurtFlash-rawDt);
   shake=Math.max(0,shake-rawDt*11);player.inv=Math.max(0,player.inv-dt);
   cameraVX+=(-cameraX*150-cameraVX*20)*rawDt;cameraVY+=(-cameraY*150-cameraVY*20)*rawDt;cameraX+=cameraVX*rawDt;cameraY+=cameraVY*rawDt;
-  if(noticeTime>0){noticeTime-=rawDt;if(noticeTime<=0)$('notice').textContent='';}
+  if(noticeTime>0){noticeTime-=rawDt;if(noticeTime<=0)HUD.notice='';}
+  HUD.killPulse=Math.max(0,HUD.killPulse-rawDt);
   if(reloadTime>0){
     reloadTime=Math.max(0,reloadTime-rawDt);const progress=1-reloadTime/getReloadDuration();
     if(progress>.23&&reloadStage===0){reloadStage=1;const g=makePlayerPose().gun;emit({kind:getWeapon().id==='shotgun'?'shell':'magazine',x:g.origin.x+player.face*22,y:g.origin.y+15,vx:-player.face*15,vy:15,life:5,size:4,color:'#343b2e',spin:3,gravity:220,floor:player.y+2});sound('reload');}
@@ -420,7 +404,7 @@ function update(rawDt){
   zombies=zombies.filter(z=>Math.abs(z.x-player.x)<1300);
   for(const p of pickups){p.life-=dt;if(Math.hypot(player.x-p.x,player.y-p.y)<28){if(p.type==='ammo'){supplyAmmo();announce('全武器弹药补给',1.2);}else{player.hp=Math.min(100,player.hp+35);announce('生命值 +35',1.2);}p.life=0;sound('pickup');}}pickups=pickups.filter(p=>p.life>0);
   updateJourney();
-  if(!evacuation&&!spawnLeft&&!zombies.length){if(!waveBreak){waveBreak=3.5;supplyAmmo();player.hp=Math.min(100,player.hp+15);announce('区域肃清 · 全武器补给 / 生命 +15',3);$('wave-status').textContent='整备时间';}waveBreak-=dt;if(waveBreak<=0){wave++;beginWave();}}
+  if(!evacuation&&!spawnLeft&&!zombies.length){if(!waveBreak){waveBreak=3.5;supplyAmmo();player.hp=Math.min(100,player.hp+15);announce('区域肃清 · 全武器补给 / 生命 +15',3);HUD.waveStatus='整备时间';}waveBreak-=dt;if(waveBreak<=0){wave++;beginWave();}}
   hudAccumulator+=rawDt;if(hudAccumulator>.08){updateHUD();hudAccumulator=0;}
 }
 function draw(){
@@ -469,27 +453,29 @@ function draw(){
     if(ahead){const t=`${ahead} ▶`,w=textWidth(t);rect(ctx,W-12-w,219,w+8,13,'#141a12aa');ctx.fillStyle='#ffd58a';ctx.fillText(t,W-8-w,228);}
   }
   ctx.restore();
+  // Screen-space UI (HUD, menus, touch controls) is drawn last by ui.js, outside the camera-shake transform.
+  if(typeof drawUI==='function')drawUI(ctx);
 }
 let resizePoll=0;
 // Poll the viewport box twice a second as well: mobile browser chrome and CSS changes resize it without a resize event on the window.
 function frame(time){const dt=Math.min((time-lastTime)/1000||0,.035);lastTime=time;resizePoll+=dt;if(resizePoll>.5){resizePoll=0;resizeGame();}update(dt);draw();requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 function pointerPosition(e){const r=canvas.getBoundingClientRect();let scaleX=r.width/W,scaleY=r.height/H,offsetX=0,offsetY=0;const fit=getComputedStyle(canvas).objectFit;if(fit==='cover'||fit==='contain'){const scale=fit==='cover'?Math.max(scaleX,scaleY):Math.min(scaleX,scaleY);const pos=getComputedStyle(canvas).objectPosition.split(' ');offsetX=(r.width-W*scale)*(parseFloat(pos[0])/100);offsetY=(r.height-H*scale)*(parseFloat(pos[1]||'50')/100);scaleX=scaleY=scale;}pointer.screenX=(e.clientX-r.left-offsetX)/scaleX;pointer.screenY=(e.clientY-r.top-offsetY)/scaleY;pointer.x=pointer.screenX+viewX;pointer.y=pointer.screenY;}
-canvas.addEventListener('pointermove',pointerPosition);
-canvas.addEventListener('pointerdown',e=>{if(e.button!==0)return;pointerPosition(e);if(state==='playing'){pointer.down=true;player.face=pointer.x>=player.x?1:-1;player.pose=makePlayerPose().pose;shoot();canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});}});
-window.addEventListener('pointerup',e=>{if(e.target===canvas||e.target===$('touch-fire')){pointer.down=false;touchFiring=false;triggerLatched=false;}});window.addEventListener('pointercancel',()=>{pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();});
+// Pointer events go through ui.js first (uiPointer returns true when a button/d-pad/menu consumed them); the rest is aiming and firing.
+const uiConsumes=(type,e)=>typeof uiPointer==='function'&&uiPointer(type,pointer.screenX,pointer.screenY,e.pointerId)===true;
+canvas.addEventListener('pointermove',e=>{pointerPosition(e);uiConsumes('move',e);});
+canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')e.preventDefault();if(e.button!==0)return;pointerPosition(e);if(uiConsumes('down',e)){try{canvas.setPointerCapture(e.pointerId);}catch{}return;}if(state==='playing'){pointer.down=true;player.face=pointer.x>=player.x?1:-1;player.pose=makePlayerPose().pose;shoot();canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});}});
+window.addEventListener('pointerup',e=>{if(uiConsumes('up',e))return;if(e.target===canvas){pointer.down=false;touchFiring=false;triggerLatched=false;}});
+window.addEventListener('pointercancel',e=>{if(uiConsumes('cancel',e))return;pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))e.preventDefault();if(e.repeat&&['escape',' ','r','enter'].includes(key))return;if(key==='escape'||key===' '){pauseGame();return;}if(key==='enter'&&(state==='ready'||state==='over'||state==='won')){startGame();return;}if(state!=='playing')return;keys.add(key);if(key==='r')reload();if(['1','2','3','4','5'].includes(key))switchWeapon(WEAPON_ORDER[Number(key)-1]);if(key==='q'&&!e.repeat)switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(selectedWeapon)+1)%WEAPON_ORDER.length]);});
 window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();pointer.down=false;triggerLatched=false;if(state==='playing')pauseGame();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pauseGame();});
-$('start').addEventListener('click',()=>state==='paused'?pauseGame():startGame());$('pause').addEventListener('click',pauseGame);
-$('sound').addEventListener('click',()=>{soundEnabled=!soundEnabled;$('sound').innerHTML=`♫ <span>声音${soundEnabled?'开启':'关闭'}</span>`;$('sound').setAttribute('aria-label',soundEnabled?'关闭声音':'开启声音');$('sound').title=soundEnabled?'关闭声音':'开启声音';if(soundEnabled){initAudio();sound('pickup');}});
-$('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('viewport').requestFullscreen();}catch{announce('当前浏览器暂不支持全屏',2);}});
-for(const button of document.querySelectorAll('[data-move]')){button.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(button.dataset.move);button.setPointerCapture(e.pointerId);});for(const event of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(event,()=>keys.delete(button.dataset.move));}
-$('touch-reload').addEventListener('click',()=>reload());
-for(const button of document.querySelectorAll('[data-weapon]'))button.addEventListener('click',()=>switchWeapon(button.dataset.weapon));
-$('touch-fire').addEventListener('pointerdown',e=>{e.preventDefault();touchFiring=true;pointer.down=true;const target=[...zombies].sort((a,b)=>distance(a,player)-distance(b,player))[0];if(target){pointer.x=target.pose.shoulder.x;pointer.y=(target.pose.shoulder.y+target.pose.hip.y)/2;player.face=pointer.x>=player.x?1:-1;player.pose=makePlayerPose().pose;}shoot();$('touch-fire').setPointerCapture(e.pointerId);});
-for(const event of ['pointerup','pointercancel','lostpointercapture'])$('touch-fire').addEventListener(event,()=>{pointer.down=false;touchFiring=false;triggerLatched=false;});
+// Entry points for the canvas-drawn controls in ui.js (sound / fullscreen buttons, touch fire button).
+function toggleSound(){soundEnabled=!soundEnabled;if(soundEnabled){initAudio();sound('pickup');}}
+async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{announce('当前浏览器暂不支持全屏',2);}}
+function touchFireStart(){touchFiring=true;pointer.down=true;const target=[...zombies].sort((a,b)=>distance(a,player)-distance(b,player))[0];if(target){pointer.x=target.pose.shoulder.x;pointer.y=(target.pose.shoulder.y+target.pose.hip.y)/2;player.face=pointer.x>=player.x?1:-1;player.pose=makePlayerPose().pose;}shoot();}
+function touchFireEnd(){pointer.down=false;touchFiring=false;triggerLatched=false;}
 
 updateHUD();

@@ -9,92 +9,13 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="stage" id="viewport">
-    <canvas id="game" width="640" height="330" tabindex="0" aria-label="WASD移动，鼠标瞄准，左键射击或挥击，手枪点按单发，R枪械换弹，1至5或Q切换武器，Shift冲刺，Esc暂停"></canvas>
-    <div class="scanlines" aria-hidden="true"></div>
-
-    <!-- Top-left: vitals -->
-    <section class="hud vitals" aria-label="生命值与体力">
-      <div class="vital-row"><span class="vital-icon">✚</span><b id="health">100 <span>/ 100</span></b></div>
-      <div class="bar health-track"><i id="health-bar"></i></div>
-      <div class="bar stamina-track"><i id="stamina-bar"></i></div>
-      <div class="sector-line"><span id="sector-name">暮色农场</span><small id="sector-code">SECTOR 01</small></div>
-    </section>
-
-    <!-- Top-center: wave + route -->
-    <section class="hud mission" aria-label="波次与撤离进度">
-      <div class="wave-row"><span class="wave-label">尸潮</span><strong id="wave">01</strong><em id="wave-status">保持警戒</em></div>
-      <div class="route"><div class="route-top"><span>撤离路线</span><b id="route-distance">0 / 615 m</b></div><div class="route-track"><i id="route-progress"></i><span class="route-flag" aria-hidden="true"></span></div></div>
-    </section>
-
-    <!-- Top-right: score + system buttons -->
-    <section class="hud score" aria-label="击杀与时间">
-      <div class="score-block"><span>击杀</span><strong id="kills">000</strong></div>
-      <div class="score-block"><span>生存</span><strong id="time">00:00</strong></div>
-      <div class="sys">
-        <button id="sound" class="sys-button" aria-label="关闭声音" title="关闭声音">♫ <span>声音开启</span></button>
-        <button id="pause" class="sys-button" title="暂停 / 继续（Esc）" aria-label="暂停游戏">Ⅱ</button>
-        <button id="fullscreen" class="sys-button" title="全屏" aria-label="全屏游戏">⛶</button>
-      </div>
-    </section>
-
-    <!-- Status ticker (mode + hint) -->
-    <div class="ticker" aria-live="off"><b id="mode-label">等待部署</b><span id="bottom-status">向东突围 · 每个区域边界提供补给</span></div>
-
-    <!-- Bottom-center: weapon rig -->
-    <nav class="hud rig" aria-label="选择武器">
-      <button class="weapon-slot selected" data-weapon="rifle" aria-pressed="true"><kbd>1</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M4 10h18v-3h34v3h24v-4h3v9H56v3H41l6 10-8 2-6-12H22v-2H4z"/><path fill="#8b6942" d="M4 10h15v7H4zm49 1h13v5H53z"/></svg><span class="weapon-name">AK-47</span><em class="weapon-count">30 / 150</em></button>
-      <button class="weapon-slot" data-weapon="smg" aria-pressed="false"><kbd>2</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M11 11h14V8h36v3h15v5H59v4H45v10h-7V18H27v6h-6v-8H11z"/><path fill="#859183" d="M27 9h30v2H27z"/></svg><span class="weapon-name">MP5</span><em class="weapon-count">36 / 180</em></button>
-      <button class="weapon-slot" data-weapon="shotgun" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M3 13h19V9h61v4H50v5H31l-3 8-7-2v-7H3z"/><path fill="#a97749" d="M3 13h17v7H3zm40 1h20v5H40z"/></svg><span class="weapon-name">M870</span><em class="weapon-count">8 / 56</em></button>
-      <button class="weapon-slot" data-weapon="pistol" aria-pressed="false"><kbd>4</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M23 5h41v3h8v7H49v4h-8l-5 10H23l7-16h-7z"/><path fill="#8b6942" d="M31 15h11l-5 11H26z"/><path fill="#a9ad93" d="M28 6h35v3H28z"/><path fill="#1c2119" d="M43 15h5v3h-6z"/></svg><span class="weapon-name">M1911</span><em class="weapon-count">10 / 90</em></button>
-      <button class="weapon-slot" data-weapon="crowbar" aria-pressed="false"><kbd>5</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="#a77952" d="M19 25 55 7h16v4H57L23 29z"/><path fill="currentColor" d="M51 7 61 1h14l5 5v8l-6 5-4-4 5-4V7H63l-7 5zM16 26l6-3 4 5-10 2z"/><path fill="#c0b58b" d="m30 22 22-11 1 2-22 11z"/></svg><span class="weapon-name">撬棍</span><em class="weapon-count">体力驱动</em></button>
-    </nav>
-
-    <!-- Bottom-right: magazine -->
-    <section class="hud magazine" aria-label="弹药">
-      <span id="reload-label" class="mag-label">AK-47 · 自动步枪</span>
-      <div class="mag-count"><strong id="ammo">30</strong><span>/ 150</span><kbd id="reload-key">R</kbd></div>
-      <div class="mag-ticks" id="ammo-ticks" style="--fill:1" aria-hidden="true"></div>
-    </section>
-
-    <div id="notice" class="notice" aria-live="polite"></div>
-    <div class="rotate-hint" aria-hidden="true">横屏游玩体验更佳</div>
-
-    <!-- Mission board: start / pause / end -->
-    <div id="overlay" class="overlay">
-      <div class="board">
-        <div class="board-brand"><span class="board-mark" aria-hidden="true">LL</span>死线突围<small>LAST LIGHT</small></div>
-        <div class="board-tag" id="panel-tag">四个区域。一条撤离路线。</div>
-        <h1 id="panel-title">穿过这片死地。</h1>
-        <p id="panel-copy">向东突围，沿途补给。注意疾行者、重装暴君与腐液。</p>
-        <button id="start" class="start-button"><span>开始生存</span><b aria-hidden="true">▶</b></button>
-        <div class="board-hint" id="start-hint">WASD 移动 · 左键攻击 · 1–5 / Q 切换武器</div>
-        <div class="board-record">最佳击杀 <strong id="best">000</strong></div>
-        <ul class="board-keys" aria-label="操作">
-          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>移动</span></li>
-          <li><kbd>鼠标</kbd><span>瞄准 / 攻击</span></li>
-          <li><kbd>R</kbd><span>换弹</span></li>
-          <li><kbd>Shift</kbd><span>冲刺</span></li>
-          <li><kbd>Esc</kbd><span>暂停</span></li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- Touch controls -->
-    <div class="touch" aria-label="触屏操作">
-      <div class="dpad"><button data-move="w" aria-label="上">▲</button><button data-move="a" aria-label="左">◀</button><button data-move="s" aria-label="下">▼</button><button data-move="d" aria-label="右">▶</button></div>
-      <div class="touch-right"><button id="touch-reload">换弹</button><button id="touch-fire">开火</button></div>
-    </div>
-  </div>
-  <script>
-    // HUD scale follows the viewport so the interface stays legible from phones to 4K.
-    (function(){const root=document.documentElement;function fit(){const s=Math.min(innerWidth/1440,innerHeight/810);root.style.setProperty('--ui',Math.max(.8,Math.min(1.6,s)).toFixed(3));}fit();addEventListener('resize',fit);addEventListener('orientationchange',fit);})();
-  </script>
+  <canvas id="game" width="640" height="330" tabindex="0" aria-label="死线突围：WASD移动，鼠标瞄准，左键射击或挥击，R换弹，1至5或Q切换武器，Shift冲刺，Esc暂停，Enter开始"></canvas>
   <script src="arsenal.js"></script>
   <script src="characters.js"></script>
   <script src="effects.js"></script>
   <script src="specials.js"></script>
   <script src="world.js"></script>
+  <script src="ui.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
