@@ -1,6 +1,6 @@
 'use strict';
 
-// Hit feedback tuned for a 640x330 pixel-art frame: big bright blood, fat muzzle stars, flying ragdolls.
+// Hit feedback tuned for a 330 px tall pixel-art frame (width follows the viewport): big bright blood, fat muzzle stars, flying ragdolls.
 const MAX_PARTICLES=500, MAX_RIGS=32, MAX_CORPSES=28, MAX_DECALS=400, CORPSE_LIFE=40, CORPSE_SOFT_CAP=MAX_CORPSES-4;
 const BLOOD_FRESH='#9a2418', BLOOD_RIM='#6b1510', BLOOD_OLD='#5a1610', BLOOD_DARKEN_AFTER=8;
 let rigs=[],decals=[],physicsAccumulator=0,audioMaster=null,noiseBuffer=null,effectsClock=0;

@@ -1,16 +1,38 @@
 'use strict';
 
-// All artwork is drawn at a native 640 × 330 resolution, including articulated sprites.
+// All artwork is drawn at a native 330 px tall frame; the logical width follows the viewport aspect (640..1280) so fullscreen never letterboxes.
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 ctx.imageSmoothingEnabled = false;
-const W = 640, H = 330, PLAYER_SCALE = 1, WORLD_LENGTH = 6400;
+let W = 640;
+const H = 330, PLAYER_SCALE = 1, WORLD_LENGTH = 6400;
 // Smaller actors: ~20% of frame height so 10-14 zombies fit on screen (They Are Coming framing).
-const LANE_TOP = 246, LANE_BOTTOM = 312, CAMERA_LEAD = 150;
+const LANE_TOP = 246, LANE_BOTTOM = 312;
 const ROUTE_START = 142, EXTRACTION_X = 6292, ROUTE_METERS = (EXTRACTION_X - ROUTE_START) / 10;
 const $ = id => document.getElementById(id);
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const rand = (min, max) => min + Math.random() * (max - min);
+// Dynamic logical width: W = round(H * viewportAspect) clamped to [640, 1280] and kept even, so a 16:9 or wider
+// screen fills edge to edge while portrait phones keep the classic 640 frame (bars top/bottom).
+function measureViewport(){
+  let w=NaN,h=NaN;
+  try{const box=typeof document!=='undefined'&&document.getElementById?document.getElementById('viewport'):null;if(box){w=box.clientWidth;h=box.clientHeight;}}catch{}
+  const ok=(v)=>typeof v==='number'&&Number.isFinite(v)&&v>0;
+  if(!(ok(w)&&ok(h))){try{if(typeof window!=='undefined'){w=window.innerWidth;h=window.innerHeight;}}catch{}}
+  return ok(w)&&ok(h)?{w,h}:null;
+}
+function resizeGame(){
+  const box=measureViewport();
+  let width=640;
+  if(box){width=Math.round(H*box.w/box.h);width=Math.max(640,Math.min(1280,width));width-=width%2;}
+  if(width!==W||canvas.width!==W){
+    W=width;canvas.width=W;if(canvas.height!==H)canvas.height=H;
+    // Resizing the bitmap resets context state, so restore crisp pixel scaling.
+    ctx.imageSmoothingEnabled=false;
+    if(typeof setWorldWidth==='function')setWorldWidth(W);
+  }
+  viewX=clamp(viewX,0,WORLD_LENGTH-W);
+}
 let seed = 42;
 function seeded(min, max) { seed = (seed * 16807) % 2147483647; return min + (seed / 2147483647) * (max - min); }
 function rect(c, x, y, w, h, color) { c.fillStyle = color; c.fillRect(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h)); }
@@ -76,11 +98,14 @@ let rawTime=0,slowMo=0,hurtFlash=0,killFlashHead=false,lastKillTime=-9,killStrea
 // KNOCKDOWN_ENABLED stays off while characters.js has no lying pose (original art style).
 // HIT_STOP_ENABLED=false: hits and kills no longer freeze time (user found the stutter unpleasant).
 const HIT_STOP_ENABLED=false,KNOCKDOWN_ENABLED=false,KNOCK_MAX=420,KNOCKDOWN_SPEED=300,AIR_GRAVITY=420,ATTACK_TOTAL=.72;
-function cameraLead(){try{if(typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width:600px)').matches)return 110;}catch{}return CAMERA_LEAD;}
+function cameraLead(){try{if(typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width:600px)').matches)return Math.round(W*.17);}catch{}return Math.round(W*.23);}
 let best=0,soundEnabled=true,audioCtx=null;
 let stats={shots:0,hits:0,headshots:0,severed:0};
 try{best=Number(localStorage.getItem('last-light-best'))||0;}catch{}
 $('best').textContent=String(best).padStart(3,'0');
+resizeGame();
+if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){window.addEventListener('resize',resizeGame);window.addEventListener('orientationchange',resizeGame);}
+if(typeof document!=='undefined'&&typeof document.addEventListener==='function')document.addEventListener('fullscreenchange',()=>{resizeGame();if(typeof requestAnimationFrame==='function')requestAnimationFrame(resizeGame);});
 
 function playerMuzzle(){
   const art=makePlayerPose(),g=art.gun,raw=g.face===1?g.angle:Math.PI-g.angle,angle=Math.atan2(Math.sin(raw),Math.cos(raw));
@@ -99,7 +124,7 @@ player.pose=makePlayerPose().pose;
 function saveBest(){if(kills>best){best=kills;$('best').textContent=String(best).padStart(3,'0');try{localStorage.setItem('last-light-best',best);}catch{}}}
 function beginWave(){spawnLeft=12+wave*6;spawnTimer=.1;packLeft=Math.floor(rand(3,6));waveBreak=0;shake=Math.max(shake,3.5);cameraVY-=70;announce(`第 ${String(wave).padStart(2,'0')} 波 · 尸潮来袭`,2.6);$('wave-status').textContent='尸潮来袭';}
 function startGame(){
-  initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
+  resizeGame();initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
   keys.clear();pointer.down=false;touchFiring=false;triggerLatched=false;zombies=[];bullets=[];particles=[];corpses=[];pickups=[];rigs=[];decals=[];physicsAccumulator=0;
   elapsed=0;kills=0;wave=1;meleeSwing=null;triggerLatched=false;shotCooldown=0;reloadTime=0;shake=0;hitStop=0;muzzle=0;shotSerial=0;cameraX=cameraY=cameraVX=cameraVY=0;killFlash=0;slowMo=0;hurtFlash=0;lastKillTime=-9;killStreak=0;
   stats={shots:0,hits:0,headshots:0,severed:0};
@@ -234,8 +259,9 @@ function hitZombie(z,part,point,bullet){
 function textWidth(t){try{const m=ctx.measureText(t);return m&&Number.isFinite(m.width)?m.width:t.length*5.5;}catch{return t.length*5.5;}}
 function formatTime(t){return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
 function updateHUD(){
-  $('health').innerHTML=`${Math.ceil(player.hp)} <span>/ 100</span>`;$('health-bar').style.width=`${player.hp}%`;$('health-bar').style.background=player.hp<30?'#e4805c':'#d9eaa1';$('stamina-bar').style.width=`${player.stamina}%`;
-  $('ammo').textContent=getWeapon().melee?String(Math.floor(player.stamina)):String(player.ammo).padStart(2,'0');$('ammo').style.color=(getWeapon().melee?player.stamina<16:player.ammo<6)?'#edaa70':'';$('ammo').nextElementSibling.textContent=getWeapon().melee?'体力':`/ ${player.reserve}`;
+  $('health').innerHTML=`${Math.ceil(player.hp)} <span>/ 100</span>`;$('health-bar').style.width=`${player.hp}%`;$('health-bar').style.background=player.hp<30?'#c2402a':'#a9c25b';$('stamina-bar').style.width=`${player.stamina}%`;
+  $('ammo').textContent=getWeapon().melee?String(Math.floor(player.stamina)):String(player.ammo).padStart(2,'0');$('ammo').style.color=(getWeapon().melee?player.stamina<16:player.ammo<6)?'#e06a3c':'';$('ammo').nextElementSibling.textContent=getWeapon().melee?'体力':`/ ${player.reserve}`;
+  const ticks=$('ammo-ticks');if(ticks&&ticks.style&&ticks.style.setProperty)ticks.style.setProperty('--fill',String(clamp(getWeapon().melee?player.stamina/100:player.ammo/Math.max(1,getWeapon().magSize),0,1)));const magSize=$('mag-size');if(magSize)magSize.textContent=getWeapon().melee?'体力':String(getWeapon().magSize);
   $('reload-key').style.visibility=getWeapon().melee?'hidden':'visible';$('touch-fire').textContent=getWeapon().melee?'挥击':getWeapon().semiAuto?'点射':'开火';$('touch-reload').disabled=Boolean(getWeapon().melee);$('touch-reload').style.opacity=getWeapon().melee?'.35':'1';$('kills').textContent=String(kills).padStart(3,'0');$('wave').textContent=String(wave).padStart(2,'0');$('time').textContent=formatTime(elapsed);
   $('reload-label').textContent=reloadTime>0?`换弹中 · ${reloadTime.toFixed(1)}s`:getWeapon().label;
   const sector=getWorldSector(player.x);
@@ -444,7 +470,9 @@ function draw(){
   }
   ctx.restore();
 }
-function frame(time){const dt=Math.min((time-lastTime)/1000||0,.035);lastTime=time;update(dt);draw();requestAnimationFrame(frame);}
+let resizePoll=0;
+// Poll the viewport box twice a second as well: mobile browser chrome and CSS changes resize it without a resize event on the window.
+function frame(time){const dt=Math.min((time-lastTime)/1000||0,.035);lastTime=time;resizePoll+=dt;if(resizePoll>.5){resizePoll=0;resizeGame();}update(dt);draw();requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
 function pointerPosition(e){const r=canvas.getBoundingClientRect();let scaleX=r.width/W,scaleY=r.height/H,offsetX=0,offsetY=0;const fit=getComputedStyle(canvas).objectFit;if(fit==='cover'||fit==='contain'){const scale=fit==='cover'?Math.max(scaleX,scaleY):Math.min(scaleX,scaleY);const pos=getComputedStyle(canvas).objectPosition.split(' ');offsetX=(r.width-W*scale)*(parseFloat(pos[0])/100);offsetY=(r.height-H*scale)*(parseFloat(pos[1]||'50')/100);scaleX=scaleY=scale;}pointer.screenX=(e.clientX-r.left-offsetX)/scaleX;pointer.screenY=(e.clientY-r.top-offsetY)/scaleY;pointer.x=pointer.screenX+viewX;pointer.y=pointer.screenY;}
 canvas.addEventListener('pointermove',pointerPosition);

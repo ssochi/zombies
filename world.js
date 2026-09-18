@@ -3,7 +3,9 @@
 // Fixed world landmarks, native-resolution pixels, and independently moving depth layers.
 // The road is viewed side-on: both curbs and lane markings remain parallel.
 const worldArt = (() => {
-  const WIDTH = 640, HEIGHT = 330, TILE = 640, LENGTH = 6400;
+  // WIDTH is the live logical frame width (set by setWorldWidth); tiles stay 640 px chunks keyed by index.
+  let WIDTH = 640;
+  const HEIGHT = 330, TILE = 640, LENGTH = 6400;
   const sectors = [
     {start:0,end:1500,name:'暮色农场',code:'01',subtitle:'沿公路向东 · 穿过荒废农田'},
     {start:1500,end:3050,name:'最后一站',code:'02',subtitle:'废弃加油站 · 小心路边伏击'},
@@ -107,7 +109,7 @@ const worldArt = (() => {
   function sky(c,camera,time){
     px(c,0,0,WIDTH,125,'#a15e40');px(c,0,36,WIDTH,50,'#ae6d45');px(c,0,82,WIDTH,42,'#b17c48');
     const sunX=494-camera*.018;px(c,sunX,33,27,27,'#c99457');px(c,sunX-4,40,35,15,'#c99457');px(c,sunX-1,56,31,4,'#b7834f');
-    for(let n=-1;n<5;n++){const x=((n*237-time*1.25-camera*.065)%948+948)%948-210,y=25+hash(n+5)*40;px(c,x,y,76,3,'#9d6140');px(c,x+19,y-3,49,3,'#9d6140');px(c,x+6,y+5,112,2,'#a66842');}
+    const cloudSpan=WIDTH+320,cloudCount=Math.ceil(cloudSpan/237)+1;for(let n=-1;n<cloudCount-1;n++){const x=((n*237-time*1.25-camera*.065)%cloudSpan+cloudSpan)%cloudSpan-210,y=25+hash(n+5)*40;px(c,x,y,76,3,'#9d6140');px(c,x+19,y-3,49,3,'#9d6140');px(c,x+6,y+5,112,2,'#a66842');}
     for(let layer=0;layer<2;layer++){const fac=layer?.15:.08,base=layer?124:111,color=layer?'#896039':'#99683f',step=11;const points=[[0,base]];for(let sx=-step;sx<=WIDTH+step;sx+=step){const wx=sx+camera*fac;const h=19+Math.sin(wx*.012+layer)*10+Math.sin(wx*.026)*7;points.push([sx,base-h]);points.push([sx+step,base-h]);}points.push([WIDTH,base],[0,base]);shape(c,points,color);}
     for(let x=Math.floor(camera*.24/7)*7;x<camera*.24+WIDTH+7;x+=7){const h=4+hash(x)*13,sx=x-camera*.24;px(c,sx,126-h,5,h,'#896039');px(c,sx+2,122-h,1,5,'#896039');}
     // City silhouette appears gradually as the road approaches the industrial district.
@@ -137,7 +139,7 @@ const worldArt = (() => {
     // Single drifting leaves, widely spaced; particle timing follows world time.
     for(let i=0;i<5;i++){const period=11+i*2,progress=(time/period+i*.213)%1;const wx=Math.floor(camera/900)*900+progress*1000;const x=wx-camera;if(x<-20||x>WIDTH+20)continue;const y=162+Math.sin(progress*9+i)*23+i*7;px(c,x,y,3,1,i%2?'#8a7a46':'#9c8a55');}
     // A restrained, distant flock passes above the horizon.
-    for(let i=0;i<4;i++){const x=((time*5+i*13+311-camera*.12)%950+950)%950-140,y=46+Math.sin(time*.3+i)*4+i*2;const flap=Math.sin(time*5+i)>.0?1:-1;line(c,x-2,y+flap,x,y,'#685b3b');line(c,x,y,x+2,y+flap,'#685b3b');}
+    const flockSpan=WIDTH+310;for(let i=0;i<4;i++){const x=((time*5+i*13+311-camera*.12)%flockSpan+flockSpan)%flockSpan-140,y=46+Math.sin(time*.3+i)*4+i*2;const flap=Math.sin(time*5+i)>.0?1:-1;line(c,x-2,y+flap,x,y,'#685b3b');line(c,x,y,x+2,y+flap,'#685b3b');}
   }
   function draw(c,camera,time){
     sky(c,camera,time);
@@ -146,16 +148,18 @@ const worldArt = (() => {
     dynamic(c,camera,time);
   }
   // Full-frame colour grade: warm light from the sunset sky, cool shadow on the road, then a warm-dark vignette.
-  // Both gradients are built once per context; the stubbed test canvas has no createLinearGradient, so the tint is skipped there.
+  // Both gradients are built once per context and width; the stubbed test canvas has no createLinearGradient, so the tint is skipped there.
   const grades=new WeakMap();
   function grade(c){
     let g=grades.get(c);
-    if(!g){
-      g={tint:null,vignette:null};
+    if(!g||g.width!==WIDTH){
+      g={tint:null,vignette:null,width:WIDTH};
       // The stubbed test context answers every method with a no-op returning undefined, so check the gradient object itself.
       const tint=typeof c.createLinearGradient==='function'?c.createLinearGradient(0,0,0,HEIGHT):null;
       if(tint&&typeof tint.addColorStop==='function'){tint.addColorStop(0,'#ffb06038');tint.addColorStop(1,'#1c283847');g.tint=tint;}
-      const vignette=typeof c.createRadialGradient==='function'?c.createRadialGradient(WIDTH/2,HEIGHT/2,150,WIDTH/2,HEIGHT/2,400):null;
+      // Vignette radii scale with the frame diagonal (150/400 at 640x330) so wide frames keep the same corner falloff.
+      const outer=Math.hypot(WIDTH/2,HEIGHT/2)*1.11,inner=outer*.375;
+      const vignette=typeof c.createRadialGradient==='function'?c.createRadialGradient(WIDTH/2,HEIGHT/2,inner,WIDTH/2,HEIGHT/2,outer):null;
       if(vignette&&typeof vignette.addColorStop==='function'){vignette.addColorStop(0,'#1a141000');vignette.addColorStop(.6,'#1a141000');vignette.addColorStop(1,'#1a1410a0');g.vignette=vignette;}
       grades.set(c,g);
     }
@@ -163,10 +167,12 @@ const worldArt = (() => {
     if(g.vignette){c.fillStyle=g.vignette;c.fillRect(0,0,WIDTH,HEIGHT);}
   }
   function foreground(c,camera,time){for(let wx=Math.floor(camera/71)*71;wx<camera+WIDTH+71;wx+=71){const x=wx-camera,h=3+hash(wx)*5,wind=Math.sin(time*1.5+wx)*1.4;line(c,x,330,x+wind,330-h,'#4e5238');line(c,x+2,330,x+5+wind,329-h*.6,'#6a6848');if(hash(wx+9)>.7)px(c,x+16,329,6,1,'#8a8262');}}
-  return {draw,foreground,grade,sectorAt};
+  function setWidth(w){if(Number.isFinite(w)&&w>0)WIDTH=Math.round(w);}
+  return {draw,foreground,grade,sectorAt,setWidth};
 })();
 
 function drawWorld(c,cameraX,time){worldArt.draw(c,cameraX,time);}
 function drawWorldForeground(c,cameraX,time){worldArt.foreground(c,cameraX,time);}
 function drawWorldGrade(c){worldArt.grade(c);}
+function setWorldWidth(w){worldArt.setWidth(w);}
 function getWorldSector(worldX){return worldArt.sectorAt(worldX);}
