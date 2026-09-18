@@ -1,0 +1,7 @@
+{
+  "name": "last-light",
+  "version": "2.0.0",
+  "private": true,
+  "description": "A hand-drawn pixel survival shooter",
+  "scripts": { "start": "python3 -m http.server 5173 --bind 127.0.0.1", "check": "node --check game.js && node --check characters.js && node --check effects.js && node --check arsenal.js && node --check specials.js && node --check world.js", "test": "node --test scripts/check-game.mjs" }
+}

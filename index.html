@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#161914">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23d9ee81' d='M0 0h32v32H0z'/%3E%3Cpath fill='%23202719' d='M7 6h5v16h8v5H7zM19 6h5v11h-5z'/%3E%3C/svg%3E">
+  <title>LAST LIGHT — 死线突围</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="./" aria-label="Last Light 首页"><span class="brand-mark">L<span> L</span></span> LAST LIGHT<span class="brand-divider"></span><small>像素生存档案 / 001</small></a>
+    <div class="header-right"><span class="online"><i></i> 本地战区已就绪</span><button id="sound" class="icon-button" aria-label="关闭声音" title="关闭声音">♫ <span>声音开启</span></button></div>
+  </header>
+  <main>
+    <section class="title-row">
+      <div><div class="eyebrow"><span></span> THE DEAD DON'T WAIT.</div><h1>死线突围<span>LAST LIGHT</span></h1><p>穿过荒野、废墟与封锁线。向东前进，抵达最后的撤离点。</p></div>
+      <div class="mission"><span>生存行动</span><strong>07 <b>/</b> 荒野公路</strong><small>35°42′ N &nbsp; 116°18′ W</small></div>
+    </section>
+    <section class="game-shell" aria-label="僵尸生存射击游戏">
+      <div class="game-topbar"><div><span class="live-dot"></span><b id="mode-label">等待部署</b><span class="muted">/</span><span>HIGHWAY 07</span></div><div><span class="weather">☀  黄昏 · 32°C</span><button id="pause" title="暂停 / 继续（Esc）" aria-label="暂停游戏">Ⅱ</button><button id="fullscreen" title="全屏" aria-label="全屏游戏">⛶</button></div></div>
+      <div class="viewport" id="viewport">
+        <canvas id="game" width="640" height="330" tabindex="0" aria-label="WASD移动，鼠标瞄准，左键射击或挥击，手枪点按单发，R枪械换弹，1至5或Q切换武器，Shift冲刺，Esc暂停"></canvas>
+        <div class="hud-top"><div class="wave"><span class="hud-label">尸潮 / WAVE</span><strong id="wave">01</strong><span id="wave-status">保持警戒</span></div><div class="hud-stats"><div><span class="hud-label">击杀 / KILLS</span><strong id="kills">000</strong></div><div><span class="hud-label">生存 / TIME</span><strong id="time">00:00</strong></div></div></div>
+        <div class="location-stamp"><span id="sector-name">暮色农场</span> ↗<small id="sector-code">SECTOR 01</small></div>
+        <div class="route-hud"><div><span>撤离路线 →</span><b id="route-distance">0 / 615 m</b></div><div class="route-track"><i id="route-progress"></i></div></div>
+        <div class="hud-bottom"><div class="health-block"><div><span class="cross">✚</span> 生命值 <b id="health">100 <span>/ 100</span></b></div><div class="health-track"><i id="health-bar"></i></div><div class="stamina-track"><i id="stamina-bar"></i></div></div><div class="ammo-block"><span id="reload-label">AK-47 · 自动步枪</span><div><strong id="ammo">30</strong><span>/ 150</span><kbd id="reload-key">R</kbd></div></div></div>
+        <div id="notice" class="notice" aria-live="polite"></div>
+        <div id="overlay" class="overlay"><div class="deploy-panel"><div class="panel-tag" id="panel-tag">四个区域。一条撤离路线。</div><h2 id="panel-title">穿过这片死地。</h2><p id="panel-copy">向东突围，沿途补给。注意疾行者、重装暴君与腐液。</p><button id="start" class="start-button"><span>开始生存</span><b>↗</b></button><div class="start-hint" id="start-hint">WASD 移动 · 左键攻击 · 1–5 / Q 切换武器</div></div></div>
+        <div class="scanlines"></div>
+        <div class="mobile-controls"><div class="dpad"><button data-move="w">↑</button><button data-move="a">←</button><button data-move="s">↓</button><button data-move="d">→</button></div><button id="touch-reload">换弹</button><button id="touch-fire">开火</button></div>
+      </div>
+      <div class="game-bottom"><span><i></i> <span id="bottom-status">向东突围 · 每个区域边界提供补给</span></span><span>ROAD TO EXTRACTION <b>v2.0</b></span></div>
+    </section>
+    <section class="loadout" aria-label="选择武器">
+      <div class="loadout-title">随身武装<small>1–5 直切 · Q 轮换</small></div>
+      <button class="weapon-slot selected" data-weapon="rifle" aria-pressed="true"><kbd>1</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M4 10h18v-3h34v3h24v-4h3v9H56v3H41l6 10-8 2-6-12H22v-2H4z"/><path fill="#8b6942" d="M4 10h15v7H4zm49 1h13v5H53z"/></svg><span><b>AK-47</b><small>均衡步枪</small></span><em class="weapon-count">30 / 150</em></button>
+      <button class="weapon-slot" data-weapon="smg" aria-pressed="false"><kbd>2</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M11 11h14V8h36v3h15v5H59v4H45v10h-7V18H27v6h-6v-8H11z"/><path fill="#859183" d="M27 9h30v2H27z"/></svg><span><b>MP5</b><small>高射速冲锋枪</small></span><em class="weapon-count">36 / 180</em></button>
+      <button class="weapon-slot" data-weapon="shotgun" aria-pressed="false"><kbd>3</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M3 13h19V9h61v4H50v5H31l-3 8-7-2v-7H3z"/><path fill="#a97749" d="M3 13h17v7H3zm40 1h20v5H40z"/></svg><span><b>M870</b><small>近距霰弹枪</small></span><em class="weapon-count">8 / 56</em></button>
+      <button class="weapon-slot" data-weapon="pistol" aria-pressed="false"><kbd>4</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="currentColor" d="M23 5h41v3h8v7H49v4h-8l-5 10H23l7-16h-7z"/><path fill="#8b6942" d="M31 15h11l-5 11H26z"/><path fill="#a9ad93" d="M28 6h35v3H28z"/><path fill="#1c2119" d="M43 15h5v3h-6z"/></svg><span><b>M1911</b><small>半自动手枪</small></span><em class="weapon-count">10 / 90</em></button>
+      <button class="weapon-slot" data-weapon="crowbar" aria-pressed="false"><kbd>5</kbd><svg viewBox="0 0 90 30" aria-hidden="true"><path fill="#a77952" d="M19 25 55 7h16v4H57L23 29z"/><path fill="currentColor" d="M51 7 61 1h14l5 5v8l-6 5-4-4 5-4V7H63l-7 5zM16 26l6-3 4 5-10 2z"/><path fill="#c0b58b" d="m30 22 22-11 1 2-22 11z"/></svg><span><b>撬棍</b><small>近身破阵</small></span><em class="weapon-count">体力驱动 / 无弹药</em></button>
+    </section>
+    <section class="below-game"><div class="controls-stack"><div class="controls"><span class="controls-title">操作指南</span><div><kbd>W</kbd><span class="wasd"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>移动</span></div><div><span class="mouse-icon"></span><span>瞄准 / 攻击</span></div><div><kbd>R</kbd><span>枪械换弹</span></div><div><kbd>SHIFT</kbd><span>冲刺</span></div><div><kbd>ESC</kbd><span>暂停</span></div></div><p class="combat-hint">手枪点按单发 · 撬棍左键挥击，消耗 16 体力 · 像素断肢与血肉反馈</p></div><div class="record">最佳击杀 <strong id="best">000</strong><span>↗</span></div></section>
+    <footer><span>穿过四个区域，抵达最后的撤离点。</span><span>STAY ALIVE. KEEP MOVING. <span class="footer-square">▪</span></span></footer>
+  </main>
+  <script src="arsenal.js"></script>
+  <script src="characters.js"></script>
+  <script src="effects.js"></script>
+  <script src="specials.js"></script>
+  <script src="world.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
