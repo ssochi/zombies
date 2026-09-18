@@ -17,16 +17,15 @@ function rect(c, x, y, w, h, color) { c.fillStyle = color; c.fillRect(Math.round
 function poly(c, points, color) { c.fillStyle = color; c.beginPath(); points.forEach(([x,y],i)=>i ? c.lineTo(Math.round(x),Math.round(y)) : c.moveTo(Math.round(x),Math.round(y))); c.closePath(); c.fill(); }
 function limb(c, x1, y1, x2, y2, width, color) { c.save(); c.translate(Math.round(x1),Math.round(y1)); c.rotate(Math.atan2(y2-y1,x2-x1)); rect(c,0,-width/2,Math.hypot(x2-x1,y2-y1),width,color); c.restore(); }
 
-// Cool saturated zombie skin against the warm sunset world; clothing sits well above road value.
 const outfits = [
-  {skin:'#6fb994',shade:'#4a8a6c',shirt:'#b8552a',pants:'#4e5fa3',hair:'#8f3e17',blood:'#b3241a'},
-  {skin:'#7cc39c',shade:'#52937a',shirt:'#2d6f7a',pants:'#8d6a42',hair:'#252720',blood:'#b0221a'},
-  {skin:'#66b18f',shade:'#43816a',shirt:'#d9cfa8',pants:'#3f4f8a',hair:'#345c56',blood:'#c0261c'},
-  {skin:'#8ac7a3',shade:'#5c9a7c',shirt:'#d3742c',pants:'#6d7591',hair:'#b14512',blood:'#b2231a'},
-  {skin:'#72bd9e',shade:'#4b8d72',shirt:'#3a6fb0',pants:'#a88a3c',hair:'#24231c',blood:'#b8261c'},
-  {skin:'#5fae8a',shade:'#3f7e66',shirt:'#c9a23a',pants:'#9a4a38',hair:'#943c20',blood:'#b5231a'},
-  {skin:'#7fc0a8',shade:'#548e78',shirt:'#7a4c9e',pants:'#7c8b4c',hair:'#9b581b',blood:'#ad2018'},
-  {skin:'#69b58d',shade:'#468568',shirt:'#8e2f3a',pants:'#67708a',hair:'#1c292b',blood:'#bf271d'}
+  {skin:'#8e9b6c',shade:'#727e53',shirt:'#3b3b30',pants:'#62643b',hair:'#8f3e17',blood:'#850f0b'},
+  {skin:'#9b9e6c',shade:'#7f8456',shirt:'#233e45',pants:'#253b3d',hair:'#252720',blood:'#850e09'},
+  {skin:'#8e9e76',shade:'#728365',shirt:'#c0b593',pants:'#20283a',hair:'#345c56',blood:'#91120e'},
+  {skin:'#8d996b',shade:'#6d7c50',shirt:'#a85a1d',pants:'#464738',hair:'#b14512',blood:'#840f0c'},
+  {skin:'#a0a16e',shade:'#7c8655',shirt:'#142b42',pants:'#9c9259',hair:'#24231c',blood:'#8a100c'},
+  {skin:'#8c9976',shade:'#6d805b',shirt:'#686353',pants:'#703025',hair:'#943c20',blood:'#890d08'},
+  {skin:'#929975',shade:'#727f59',shirt:'#242722',pants:'#354744',hair:'#9b581b',blood:'#7e0e08'},
+  {skin:'#81976b',shade:'#657e53',shirt:'#345254',pants:'#34494a',hair:'#1c292b',blood:'#900f0b'}
 ];
 
 const RELOAD_DURATION=1.85;
@@ -74,7 +73,8 @@ let shotCooldown=0,reloadTime=0,shake=0,muzzle=0,noticeTime=0,hitMarker=0,hitSto
 let cameraX=0,cameraY=0,cameraVX=0,cameraVY=0,killFlash=0,headshotMarker=false;
 // rawTime never stalls during hit-stop so screen shake keeps oscillating; slowMo is the wave-clear beat.
 let rawTime=0,slowMo=0,hurtFlash=0,killFlashHead=false,lastKillTime=-9,killStreak=0,packLeft=0;
-const KNOCK_MAX=420,KNOCKDOWN_SPEED=300,AIR_GRAVITY=420,ATTACK_TOTAL=.72;
+// KNOCKDOWN_ENABLED stays off while characters.js has no lying pose (original art style).
+const KNOCKDOWN_ENABLED=false,KNOCK_MAX=420,KNOCKDOWN_SPEED=300,AIR_GRAVITY=420,ATTACK_TOTAL=.72;
 function cameraLead(){try{if(typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width:600px)').matches)return 110;}catch{}return CAMERA_LEAD;}
 let best=0,soundEnabled=true,audioCtx=null;
 let stats={shots:0,hits:0,headshots:0,severed:0};
@@ -228,7 +228,7 @@ function hitZombie(z,part,point,bullet){
   z.immobilized=immobilized(z);
   if(z.hp<=0)killZombie(z,part,dir,w.id);
   // Non-lethal knockdown: a hard shove floors anything but a brute for .9 s (still hittable while down).
-  else if(!brute&&Math.abs(z.knockVX)>KNOCKDOWN_SPEED&&(z.downed||0)<=0){z.downed=.9;z.stagger=0;hitStop=Math.max(hitStop,.05);}
+  else if(KNOCKDOWN_ENABLED&&!brute&&Math.abs(z.knockVX)>KNOCKDOWN_SPEED&&(z.downed||0)<=0){z.downed=.9;z.stagger=0;hitStop=Math.max(hitStop,.05);}
 }
 function textWidth(t){try{const m=ctx.measureText(t);return m&&Number.isFinite(m.width)?m.width:t.length*5.5;}catch{return t.length*5.5;}}
 function formatTime(t){return `${String(Math.floor(t/60)).padStart(2,'0')}:${String(Math.floor(t%60)).padStart(2,'0')}`;}
