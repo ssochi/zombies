@@ -73,7 +73,7 @@ function updateSpecial(z, dt, api) {
   if (z.specialState === 'idle') {
     if (z.specialCooldown>0 || z.attackTime>0) return out;
     if (z.kind === 'spitter' && distance>92 && distance<420) {
-      z.specialTarget={x:p.x+(p.vx||0)*.2,y:specialClamp(p.y+(p.vy||0)*.18,232,312)};
+      z.specialTarget={x:p.x+(p.vx||0)*.2,y:specialClamp(p.y+(p.vy||0)*.18,LANE_TOP-6,LANE_BOTTOM+4)};
       specialStage(z,'windup',.95);z.attackTime=0;
     } else if (z.kind === 'runner' && distance>58 && distance<205 && Math.abs(dy)<42) {
       z.specialTarget={x:p.x,y:p.y};specialStage(z,'windup',.47);z.attackTime=0;
@@ -99,7 +99,7 @@ function updateSpecial(z, dt, api) {
     }
   } else if (z.specialState === 'charge') {
     const speed=z.kind==='brute'?198:238, oldX=z.x, oldY=z.y;
-    z.x+=z.chargeX*speed*dt;z.y=specialClamp(z.y+z.chargeY*speed*dt,232,312);
+    z.x+=z.chargeX*speed*dt;z.y=specialClamp(z.y+z.chargeY*speed*dt,LANE_TOP-6,LANE_BOTTOM+4);
     z.face=z.chargeX>=0?1:-1;z.phase+=dt*(z.kind==='brute'?13:21);
     z.chargeDust-=dt;if(z.chargeDust<=0){z.chargeDust=.075;specialDust(api,z.x,z.y,z.kind==='brute'?3:1);}
     // Swept collision avoids skipping the player at low frame rates.

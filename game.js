@@ -4,7 +4,9 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d', { alpha: false });
 ctx.imageSmoothingEnabled = false;
-const W = 640, H = 330, PLAYER_SCALE = 1.38, WORLD_LENGTH = 6400;
+const W = 640, H = 330, PLAYER_SCALE = 1, WORLD_LENGTH = 6400;
+// Smaller actors: ~20% of frame height so 10-14 zombies fit on screen (They Are Coming framing).
+const LANE_TOP = 246, LANE_BOTTOM = 312, CAMERA_LEAD = 150;
 const ROUTE_START = 142, EXTRACTION_X = 6292, ROUTE_METERS = (EXTRACTION_X - ROUTE_START) / 10;
 const $ = id => document.getElementById(id);
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -15,15 +17,16 @@ function rect(c, x, y, w, h, color) { c.fillStyle = color; c.fillRect(Math.round
 function poly(c, points, color) { c.fillStyle = color; c.beginPath(); points.forEach(([x,y],i)=>i ? c.lineTo(Math.round(x),Math.round(y)) : c.moveTo(Math.round(x),Math.round(y))); c.closePath(); c.fill(); }
 function limb(c, x1, y1, x2, y2, width, color) { c.save(); c.translate(Math.round(x1),Math.round(y1)); c.rotate(Math.atan2(y2-y1,x2-x1)); rect(c,0,-width/2,Math.hypot(x2-x1,y2-y1),width,color); c.restore(); }
 
+// Cool saturated zombie skin against the warm sunset world; clothing sits well above road value.
 const outfits = [
-  {skin:'#8e9b6c',shade:'#727e53',shirt:'#3b3b30',pants:'#62643b',hair:'#8f3e17',blood:'#850f0b'},
-  {skin:'#9b9e6c',shade:'#7f8456',shirt:'#233e45',pants:'#253b3d',hair:'#252720',blood:'#850e09'},
-  {skin:'#8e9e76',shade:'#728365',shirt:'#c0b593',pants:'#20283a',hair:'#345c56',blood:'#91120e'},
-  {skin:'#8d996b',shade:'#6d7c50',shirt:'#a85a1d',pants:'#464738',hair:'#b14512',blood:'#840f0c'},
-  {skin:'#a0a16e',shade:'#7c8655',shirt:'#142b42',pants:'#9c9259',hair:'#24231c',blood:'#8a100c'},
-  {skin:'#8c9976',shade:'#6d805b',shirt:'#686353',pants:'#703025',hair:'#943c20',blood:'#890d08'},
-  {skin:'#929975',shade:'#727f59',shirt:'#242722',pants:'#354744',hair:'#9b581b',blood:'#7e0e08'},
-  {skin:'#81976b',shade:'#657e53',shirt:'#345254',pants:'#34494a',hair:'#1c292b',blood:'#900f0b'}
+  {skin:'#6fb994',shade:'#4a8a6c',shirt:'#b8552a',pants:'#4e5fa3',hair:'#8f3e17',blood:'#b3241a'},
+  {skin:'#7cc39c',shade:'#52937a',shirt:'#2d6f7a',pants:'#8d6a42',hair:'#252720',blood:'#b0221a'},
+  {skin:'#66b18f',shade:'#43816a',shirt:'#d9cfa8',pants:'#3f4f8a',hair:'#345c56',blood:'#c0261c'},
+  {skin:'#8ac7a3',shade:'#5c9a7c',shirt:'#d3742c',pants:'#6d7591',hair:'#b14512',blood:'#b2231a'},
+  {skin:'#72bd9e',shade:'#4b8d72',shirt:'#3a6fb0',pants:'#a88a3c',hair:'#24231c',blood:'#b8261c'},
+  {skin:'#5fae8a',shade:'#3f7e66',shirt:'#c9a23a',pants:'#9a4a38',hair:'#943c20',blood:'#b5231a'},
+  {skin:'#7fc0a8',shade:'#548e78',shirt:'#7a4c9e',pants:'#7c8b4c',hair:'#9b581b',blood:'#ad2018'},
+  {skin:'#69b58d',shade:'#468568',shirt:'#8e2f3a',pants:'#67708a',hair:'#1c292b',blood:'#bf271d'}
 ];
 
 const RELOAD_DURATION=1.85;
@@ -60,7 +63,7 @@ function refreshLimbState(z){
   if(z.immobilized){z.attackTime=0;z.specialState='idle';z.specialTimer=0;}
 }
 
-const player={x:142,y:288,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false};
+const player={x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false};
 let pointer={x:465,y:184,screenX:465,screenY:184,down:false};
 let keys=new Set(),zombies=[],bullets=[],particles=[],corpses=[],pickups=[],touchFiring=false;
 let meleeSwing=null,triggerLatched=false;
@@ -73,13 +76,13 @@ try{best=Number(localStorage.getItem('last-light-best'))||0;}catch{}
 $('best').textContent=String(best).padStart(3,'0');
 
 function playerMuzzle(){
-  const art=makePlayerPose(),g=art.gun,angle=g.face===1?g.angle:Math.PI-g.angle;
+  const art=makePlayerPose(),g=art.gun,raw=g.face===1?g.angle:Math.PI-g.angle,angle=Math.atan2(Math.sin(raw),Math.cos(raw));
   return{x:g.origin.x+Math.cos(angle)*getWeapon().barrelLength*PLAYER_SCALE,y:g.origin.y+Math.sin(angle)*getWeapon().barrelLength*PLAYER_SCALE,angle,origin:g.origin};
 }
 function announce(message,duration=2){$('notice').textContent=message;noticeTime=duration;}
 function addZombie(preview=false,index=0,forcedKind){
-  const y=preview?239+(index%4)*20:rand(239,306);
-  const z={x:preview?384+Math.floor(index/4)*77+(index%4)*23:(wave>1&&Math.random()<.24?viewX-rand(35,95):viewX+W+rand(30,90)),y,type:preview?index%8:Math.floor(rand(0,8)),scale:1.12+(y-239)/330,speed:preview?28:(rand(12,18)+wave*1.15)*2*1.18,phase:rand(0,TAU),hp:5.5+Math.min(6,(wave-1)*.65),hit:0,attack:rand(.2,.7),attackTime:0,attackDone:false,face:-1,dead:false,missing:{},wounds:[],limbHits:{},crawling:false,flinch:0,flinchV:0,knockVX:0,knockVY:0,pose:null};
+  const y=preview?LANE_TOP+(index%4)*17:rand(LANE_TOP,LANE_BOTTOM);
+  const z={x:preview?384+Math.floor(index/4)*77+(index%4)*23:(wave>1&&Math.random()<.24?viewX-rand(35,95):viewX+W+rand(30,90)),y,type:preview?index%8:Math.floor(rand(0,8)),scale:.8+(y-LANE_TOP)/400,speed:preview?28:(rand(12,18)+wave*1.15)*2*1.18,phase:rand(0,TAU),hp:5.5+Math.min(6,(wave-1)*.65),hit:0,attack:rand(.2,.7),attackTime:0,attackDone:false,face:-1,dead:false,missing:{},wounds:[],limbHits:{},crawling:false,flinch:0,flinchV:0,knockVX:0,knockVY:0,pose:null};
   configureSpecial(z,forcedKind||(preview?(index===7?'brute':index===9?'spitter':index===3?'runner':'normal'):chooseZombieKind(wave,index||shotSerial+zombies.length)));z.immobilized=false;z.baseSpeed=z.speed;z.pose=makeZombiePose(z);zombies.push(z);return z;
 }
 for(let i=0;i<12;i++)addZombie(true,i);
@@ -87,7 +90,7 @@ player.pose=makePlayerPose().pose;
 function saveBest(){if(kills>best){best=kills;$('best').textContent=String(best).padStart(3,'0');try{localStorage.setItem('last-light-best',best);}catch{}}}
 function beginWave(){spawnLeft=9+wave*4;spawnTimer=.1;waveBreak=0;announce(`第 ${String(wave).padStart(2,'0')} 波 · 尸潮来袭`,2.6);$('wave-status').textContent='尸潮来袭';}
 function startGame(){
-  initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:288,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
+  initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
   keys.clear();pointer.down=false;touchFiring=false;triggerLatched=false;zombies=[];bullets=[];particles=[];corpses=[];pickups=[];rigs=[];decals=[];physicsAccumulator=0;
   elapsed=0;kills=0;wave=1;meleeSwing=null;triggerLatched=false;shotCooldown=0;reloadTime=0;shake=0;hitStop=0;muzzle=0;shotSerial=0;cameraX=cameraY=cameraVX=cameraVY=0;killFlash=0;
   stats={shots:0,hits:0,headshots:0,severed:0};
@@ -229,10 +232,10 @@ function updatePlayer(dt,recoilDt=dt){
   const p=player;p.sprinting=keys.has('shift')&&p.stamina>1&&Boolean(dx||dy);const speed=p.sprinting?106:64;
   p.stamina=clamp(p.stamina+(p.sprinting?-32:19)*dt,0,100);if(dx&&dy){dx*=.707;dy*=.707;}
   const response=1-Math.exp(-17*dt);p.vx=mix(p.vx,dx*speed,response);p.vy=mix(p.vy,dy*speed*.68,response);
-  p.x=clamp(p.x+p.vx*dt,24,WORLD_LENGTH-30);p.y=clamp(p.y+p.vy*dt,239,308);p.moving=Math.hypot(p.vx,p.vy)>3;
+  p.x=clamp(p.x+p.vx*dt,24,WORLD_LENGTH-30);p.y=clamp(p.y+p.vy*dt,LANE_TOP,LANE_BOTTOM+2);p.moving=Math.hypot(p.vx,p.vy)>3;
   const previousStep=Math.floor(p.walk/Math.PI);p.walk+=Math.hypot(p.vx,p.vy)*dt/79*TAU*(p.vx*p.face<-.1?-1:1);
   if(Math.floor(p.walk/Math.PI)!==previousStep&&p.moving){dust(p.x,p.y+1,p.sprinting?4:2);sound('step');}
-  furthestX=Math.max(furthestX,p.x);viewX=mix(viewX,clamp(p.x-235,0,WORLD_LENGTH-W),1-Math.exp(-7*dt));if(!touchFiring)pointer.x=pointer.screenX+viewX;
+  furthestX=Math.max(furthestX,p.x);viewX=mix(viewX,clamp(p.x-CAMERA_LEAD,0,WORLD_LENGTH-W),1-Math.exp(-7*dt));if(!touchFiring)pointer.x=pointer.screenX+viewX;
   if(meleeSwing)p.face=meleeSwing.face;else if(Math.abs(pointer.x-p.x)>5)p.face=pointer.x>=p.x?1:-1;
   const weapon=getWeapon();
   [p.kick,p.kickVelocity]=springStep(p.kick,p.kickVelocity,weapon.kickSpring,recoilDt);
@@ -247,22 +250,22 @@ function updateZombies(dt){
   for(const z of zombies){
     z.hit=Math.max(0,z.hit-dt);z.attack=Math.max(0,z.attack-dt);
     z.flinchV+=(-z.flinch*110-z.flinchV*14)*dt;z.flinch+=z.flinchV*dt;
-    z.x+=z.knockVX*dt;z.y=clamp(z.y+z.knockVY*dt,232,312);z.knockVX*=Math.exp(-9*dt);z.knockVY*=Math.exp(-9*dt);
+    z.x+=z.knockVX*dt;z.y=clamp(z.y+z.knockVY*dt,LANE_TOP-6,LANE_BOTTOM+4);z.knockVX*=Math.exp(-9*dt);z.knockVY*=Math.exp(-9*dt);
     const ex=player.x-z.x,ey=player.y-z.y,dist=Math.hypot(ex,ey);z.face=ex>=0?1:-1;
     z.immobilized=immobilized(z);const special=updateSpecial(z,dt,specialAPI());if(state!=='playing')return;let movement=0;
-    if(!z.immobilized&&dist>28&&z.attackTime<=0){
+    if(!z.immobilized&&dist>22&&z.attackTime<=0){
       const hesitate=.73+Math.sin(z.phase)*.21,speed=z.speed*hesitate*(z.hit>0?.68:1)*(special.movementMultiplier??1);
       z.x+=ex/dist*speed*dt;z.y+=ey/dist*speed*.6*dt;movement=speed;
     }
     const oldStep=Math.floor(z.phase/Math.PI);
     z.phase+=movement*dt/(z.crawling?38:62)*TAU;
     if(Math.floor(z.phase/Math.PI)!==oldStep&&z.x>viewX&&z.x<viewX+W) dust(z.x,z.y,1);
-    if(!special.suppressMelee&&dist<43&&Math.abs(ey)<23&&z.attack<=0&&z.attackTime<=0){z.attackTime=.65;z.attackDone=false;z.attack=1.05;}
+    if(!special.suppressMelee&&dist<33&&Math.abs(ey)<18&&z.attack<=0&&z.attackTime<=0){z.attackTime=.65;z.attackDone=false;z.attack=1.05;}
     if(z.attackTime>0){
       const before=z.attackTime;z.attackTime=Math.max(0,z.attackTime-dt);
       if(before>.4&&z.attackTime<=.4&&!z.attackDone){
         z.attackDone=true;if(!z.immobilized)z.x+=z.face*5;
-        if(Math.hypot(player.x-z.x,player.y-z.y)<46&&player.inv<=0){
+        if(Math.hypot(player.x-z.x,player.y-z.y)<36&&player.inv<=0){
           const arms=Number(limbDisabled(z,'arm','L'))+Number(limbDisabled(z,'arm','R'));const damage=arms===2?7:arms===1?12:18;
           damagePlayer(damage,z.x);if(state!=='playing')return;
         }
