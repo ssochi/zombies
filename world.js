@@ -32,7 +32,13 @@ const worldArt = (() => {
   // Bricks keep a real 7 px course whatever the building's scale: the rect is mapped to world pixels first.
   function brickwork(c,x,y,w,h,base,shade){const X=Math.round(tx(x)),Y=Math.round(ty(y)),X1=Math.round(tx(x+w)),Y1=Math.round(ty(y+h));const prev=SC;SC=null;px(c,X,Y,X1-X,Y1-Y,base);for(let yy=Y+6;yy<Y1;yy+=7){px(c,X,yy,X1-X,1,shade);for(let xx=X+(Math.round((yy-Y)/7)%2)*8;xx<X1;xx+=17)px(c,xx,yy-6,1,6,shade);}SC=prev;}
   function roof(c,x,y,w,rise=Math.max(13,Math.round(w*.16))){shape(c,[[x-6,y],[x+Math.round(w*.08),y-rise],[x+w-Math.round(w*.12),y-rise],[x+w+6,y]],'#514c35');px(c,x-6,y,w+12,4,'#383d30');for(let i=8;i<w-10;i+=10)line(c,x+i,y-rise+2,x+i-Math.round(rise*.5),y-2,'#716047');}
-  function barn(c,x,y,w=120,h=80){px(c,x,y-h,w,h,'#885437');for(let a=3;a<w;a+=8)px(c,x+a,y-h,2,h,'#754c32');roof(c,x,y-h,w);const d=Math.round(w/2)-22;px(c,x+d,y-46,44,46,'#403d2b');px(c,x+d+2,y-44,19,44,'#684932');px(c,x+d+23,y-44,19,44,'#5b432e');line(c,x+d+3,y-41,x+d+19,y-3,'#856940',2);line(c,x+d+41,y-41,x+d+25,y-3,'#856940',2);px(c,x+d+16,y-h+8,12,10,'#372f25');px(c,x+d+21,y-h+8,2,10,'#5b432e');px(c,x,y-3,w,3,'#575235');}
+  // open=true: the doors stand ajar with a dark gap and a sliver of lamplight from inside, plus a lamp bracket by the frame
+  // (the swinging lantern itself is animated in barnLife). The door spans local x+d..x+d+44, so at 2x the first barn's
+  // door covers world 376..464 with its centre at 420 — the barn portal below is anchored there.
+  function barn(c,x,y,w=120,h=80,open=false){px(c,x,y-h,w,h,'#885437');for(let a=3;a<w;a+=8)px(c,x+a,y-h,2,h,'#754c32');roof(c,x,y-h,w);const d=Math.round(w/2)-22;px(c,x+d,y-46,44,46,'#403d2b');
+    if(open){px(c,x+d+19,y-44,6,44,'#1a1712');px(c,x+d+21,y-44,2,44,'#b07f3c');px(c,x+d+20,y-8,4,8,'#d09a48');px(c,x+d+2,y-44,17,44,'#684932');px(c,x+d+25,y-44,17,44,'#5b432e');line(c,x+d+3,y-41,x+d+17,y-3,'#856940',2);line(c,x+d+41,y-41,x+d+27,y-3,'#856940',2);px(c,x+d-9,y-33,8,2,'#3a3228');px(c,x+d-2,y-35,2,4,'#3a3228');}
+    else{px(c,x+d+2,y-44,19,44,'#684932');px(c,x+d+23,y-44,19,44,'#5b432e');line(c,x+d+3,y-41,x+d+19,y-3,'#856940',2);line(c,x+d+41,y-41,x+d+25,y-3,'#856940',2);}
+    px(c,x+d+16,y-h+8,12,10,'#372f25');px(c,x+d+21,y-h+8,2,10,'#5b432e');px(c,x,y-3,w,3,'#575235');}
   function car(c,x,y,variant=0){
     const body=['#767559','#965936','#596b65','#837348'][variant%4], shade=['#545944','#69442f','#3c514b','#5b563a'][variant%4];
     px(c,x+2,y-4,148,5,'#373d2e');
@@ -79,7 +85,7 @@ const worldArt = (() => {
   // to its left. Buildings sit 6 px back from the shoulder (y 205); vehicles and props stand on it (y 211..214).
   // Kilometre stones fall at 800k+50 (850, 1650, 2450 ... 5650) and every gap below is kept clear of them.
   const landmarks=[
-    {x:300,left:24,w:264,draw:(c,x)=>scaled(c,x,205,2,()=>barn(c,x,205,120,80))},
+    {x:300,left:24,w:264,draw:(c,x)=>scaled(c,x,205,2,()=>barn(c,x,205,120,80,true))},
     {x:600,w:218,draw:(c,x)=>scaled(c,x,213,1.45,()=>car(c,x,213,0))},
     {x:1000,left:24,w:300,draw:(c,x)=>{scaled(c,x,205,2,()=>barn(c,x,205,120,74));scaled(c,x+270,211,2,()=>barrel(c,x+270,211));}},
     {x:1690,left:170,w:680,draw:(c,x)=>scaled(c,x,211,2,()=>gasStation(c,x))},
@@ -125,43 +131,139 @@ const worldArt = (() => {
   function sky(c,camera,time){
     px(c,0,0,WIDTH,125,'#a15e40');px(c,0,36,WIDTH,50,'#ae6d45');px(c,0,82,WIDTH,42,'#b17c48');
     const sunX=494-camera*.018;px(c,sunX,33,27,27,'#c99457');px(c,sunX-4,40,35,15,'#c99457');px(c,sunX-1,56,31,4,'#b7834f');
+    // A higher, thinner cloud layer drifts more slowly behind the main bank.
+    const hiSpan=WIDTH+360,hiCount=Math.ceil(hiSpan/311)+1;for(let n=-1;n<hiCount-1;n++){const x=((n*311-time*.55-camera*.03)%hiSpan+hiSpan)%hiSpan-180,y=6+hash(n+15)*22;px(c,x,y,58,2,'#ab6a44');px(c,x+14,y-2,31,2,'#ab6a44');px(c,x+70,y+3,40,2,'#ab6a44');}
     const cloudSpan=WIDTH+320,cloudCount=Math.ceil(cloudSpan/237)+1;for(let n=-1;n<cloudCount-1;n++){const x=((n*237-time*1.25-camera*.065)%cloudSpan+cloudSpan)%cloudSpan-210,y=25+hash(n+5)*40;px(c,x,y,76,3,'#9d6140');px(c,x+19,y-3,49,3,'#9d6140');px(c,x+6,y+5,112,2,'#a66842');}
     for(let layer=0;layer<2;layer++){const fac=layer?.15:.08,base=layer?124:111,color=layer?'#896039':'#99683f',step=11;const points=[[0,base]];for(let sx=-step;sx<=WIDTH+step;sx+=step){const wx=sx+camera*fac;const h=19+Math.sin(wx*.012+layer)*10+Math.sin(wx*.026)*7;points.push([sx,base-h]);points.push([sx+step,base-h]);}points.push([WIDTH,base],[0,base]);shape(c,points,color);}
+    // Heat haze: thin rows across the far hills slip sideways by a pixel (the canvas copies its own rows; nothing is allocated).
+    if(c.canvas)for(let k=0;k<5;k++){const y=95+k*3,off=Math.round(Math.sin(time*2.6+k*1.9)*1.2);if(off)c.drawImage(c.canvas,0,y,WIDTH,1,off,y,WIDTH,1);}
     for(let x=Math.floor(camera*.24/7)*7;x<camera*.24+WIDTH+7;x+=7){const h=4+hash(x)*13,sx=x-camera*.24;px(c,sx,126-h,5,h,'#896039');px(c,sx+2,122-h,1,5,'#896039');}
     // City silhouette appears gradually as the road approaches the industrial district.
     const cityOrigin=1050;for(let n=0;n<17;n++){const x=cityOrigin+n*45-camera*.24;if(x<-60||x>WIDTH+20)continue;const h=17+hash(n+97)*37;px(c,x,122-h,30+hash(n)*14,h,'#8d6a47');px(c,x+6,117-h,2,8,'#8d6a47');for(let yy=130-h;yy<118;yy+=10)for(let xx=4;xx<27;xx+=9)px(c,x+xx,yy,3,3,'#8f6f4d');}
   }
-  // Utility poles top out near y 22-31, taller than any building, with wires slung between them.
-  function utilities(c,camera){
-    const par=.78,spacing=355,offset=camera*par;
-    c.save();c.strokeStyle='#8f6a48';c.lineWidth=1;
-    for(let i=Math.floor(offset/spacing)-1;i<Math.floor((offset+WIDTH)/spacing)+2;i++){const x=i*spacing-offset,y=22+hash(i+45)*9,y2=22+hash(i+46)*9;
-      c.beginPath();c.moveTo(x,y+8);c.quadraticCurveTo(x+spacing*.51,y+52,x+spacing,y2+8);c.stroke();
-      c.beginPath();c.moveTo(x,y+16);c.quadraticCurveTo(x+spacing*.51,y+60,x+spacing,y2+16);c.stroke();
+  // Utility poles top out near y 22-31, taller than any building, with wires slung between them. They stand on the
+  // shoulder baseline, so they scroll 1:1 with the ground (a parallax factor made them slide against the fence).
+  // Wind shared by everything that sways: a steady breeze plus a stronger gust every 15 s that lasts 2 s.
+  // gustTravel is the gust's running integral, so anything that speeds up with the wind stays continuous.
+  function gust(time){const g=time%15;return g<2?Math.sin(g*Math.PI/2):0;}
+  function gustTravel(time){const n=Math.floor(time/15),g=time-n*15;return n*4/Math.PI+(g<2?(1-Math.cos(g*Math.PI/2))*2/Math.PI:4/Math.PI);}
+  // One crow at a time leaves its wire and circles when the camera passes its pole (world.js never sees the player).
+  const flyer={pole:-1,t0:-99};
+  function crow(c,x,y,f){px(c,x-3,y-4,6,3,'#2a2620');px(c,x+f*2,y-6,3,3,'#2a2620');px(c,x+(f>0?5:-4),y-5,2,1,'#9a8a48');px(c,x-(f>0?6:-4),y-3,3,1,'#2a2620');}
+  function utilities(c,camera,time){
+    const spacing=355,offset=camera,g=gust(time);
+    c.save();c.lineWidth=1;
+    for(let i=Math.floor(offset/spacing)-1;i<Math.floor((offset+WIDTH)/spacing)+2;i++){const x=i*spacing-offset,y=22+hash(i+45)*9,y2=22+hash(i+46)*9,cx=x+spacing*.51,cy=y+52+Math.sin(time*1.4+i*1.3)*(1.5+g*3);
+      c.strokeStyle='#8f6a48';
+      c.beginPath();c.moveTo(x,y+8);c.quadraticCurveTo(cx,cy,x+spacing,y2+8);c.stroke();
+      c.beginPath();c.moveTo(x,y+16);c.quadraticCurveTo(cx,cy+8,x+spacing,y2+16);c.stroke();
       px(c,x,y,5,211-y,'#7a6446');px(c,x+3,y+20,2,191-y,'#8c7452');px(c,x-21,y+6,47,4,'#7a6446');for(const q of [-13,17])px(c,x+q,y,4,7,'#6b5a44');px(c,x-5,y+38,14,22,'#7a6446');px(c,x-2,y+41,8,15,'#856d4d');
+      // Pole 10 (world 3550) stands over the quarantine checkpoint: a cut strand dangles from its crossbar and sparks now and then.
+      if(i===10){const ex=x+27+Math.sin(time*1.1)*4*(1+g),ey=y+44;c.strokeStyle='#6f5438';c.beginPath();c.moveTo(x+21,y+7);c.quadraticCurveTo(x+30,y+26,ex,ey);c.stroke();
+        if(hash(Math.floor(time*4)+8)>.78){px(c,ex-1,ey-1,3,3,'#fff6c8');c.globalAlpha=.35;px(c,ex-6,ey-6,13,13,'#ffd070');c.globalAlpha=1;for(let k=0;k<3;k++)px(c,ex+hash(k+time*40)*10-5,ey+hash(k+9+time*40)*8,1,1,'#ffe9a0');}}
+      // Crows perch on the upper wire (evaluated on the same curve). They hop occasionally; the first crow on some poles flies.
+      const n=Math.floor(hash(i+200)*3);
+      for(let k=0;k<n;k++){const t=.2+hash(i*5+k+300)*.6,u=1-t,wx=u*u*x+2*u*t*cx+t*t*(x+spacing),wy=u*u*(y+8)+2*u*t*cy+t*t*(y2+8),f=hash(i+k+700)>.5?1:-1;
+        if(k===0&&hash(i+500)>.55){if(flyer.pole!==i&&x<WIDTH*.32&&x>WIDTH*.32-40&&time-flyer.t0>10){flyer.pole=i;flyer.t0=time;}
+          const e=flyer.pole===i?time-flyer.t0:99;
+          if(e<7){const a=e*1.7,r=10+Math.min(e,4)*7,air=1-Math.max(0,e-6),fx=wx+Math.cos(a)*r*air,fy=wy-(8+Math.min(e,4)*5)*air+Math.sin(a)*r*.35*air,flap=Math.sin(e*14)>0?2:-1;
+            px(c,Math.round(fx)-1,Math.round(fy),3,2,'#2a2620');line(c,fx-5,fy-flap,fx,fy,'#2a2620');line(c,fx,fy,fx+5,fy-flap,'#2a2620');continue;}}
+        const hop=(time*.4+hash(i+k*9+400))%1<.05?-3:0;crow(c,Math.round(wx),Math.round(wy)+hop,f);}
     }c.restore();
   }
   function smoke(c,wx,baseY,camera,time,seed,thickness=1){
     const x=wx-camera;if(x<-65||x>WIDTH+45)return;
     for(let i=0;i<9;i++){const age=(time*.17+i/9)%1;const xx=x+age*43+Math.sin(time*.45+i)*3, yy=baseY-age*67;const size=(5+age*17)*thickness;c.globalAlpha=(1-age)*.22;px(c,xx,yy,size,size*.7,'#4d5140');px(c,xx+size*.25,yy-size*.2,size*.7,size*.4,'#4d5140');}c.globalAlpha=1;
   }
-  function flag(c,x,y,camera,time,color='#ab7945',h=51){x-=camera;if(x<-50||x>WIDTH+10)return;px(c,x,y,2,h,'#747657');const p=[];for(let a=0;a<=29;a+=3)p.push([x+2+a,y+3+Math.round(Math.sin(time*3-a*.19)*2+a*.06)]);for(let a=29;a>=0;a-=3)p.push([x+2+a,y+16+Math.round(Math.sin(time*3-a*.19+.7)*2)]);shape(c,p,color);px(c,x+3,y+6,2,8,'#b79a65');}
+  function flag(c,x,y,camera,time,color='#ab7945',h=51,g=0){x-=camera;if(x<-50||x>WIDTH+10)return;px(c,x,y,2,h,'#747657');const p=[],amp=2+g*2.5;for(let a=0;a<=29;a+=3)p.push([x+2+a,y+3+Math.round(Math.sin(time*3-a*.19)*amp+a*.06)]);for(let a=29;a>=0;a-=3)p.push([x+2+a,y+16+Math.round(Math.sin(time*3-a*.19+.7)*amp)]);shape(c,p,color);px(c,x+3,y+6,2,8,'#b79a65');}
+  // ---- Living road: everything below is redrawn each frame over the cached tiles. All of it is rects and lines,
+  // culled to the visible range and driven by time/camera/hash, so nothing is allocated per frame.
+  const tumble={epoch:-1,x0:0},bag={epoch:-1,x0:0,y0:0};
+  function chicken(c,x,y,f,peck){px(c,x-3,y-5,7,4,'#d9cba3');px(c,x-(f>0?5:-4),y-6,2,2,'#c8b890');px(c,x+f*3,y-7+peck,3,3,'#d9cba3');px(c,x+f*3+(f>0?0:1),y-8+peck,2,1,'#c0402a');px(c,x+(f>0?6:-4),y-6+peck,1,1,'#d9a040');px(c,x-1,y-1,1,2,'#c98a3a');px(c,x+2,y-1,1,2,'#c98a3a');}
+  // Barns (world 300 and 1000): a windmill on a pole beside each, hay drifting from the loft, and at the first barn the
+  // door lantern (bracket at world 358..374 × 139, pivot 360,143), its glow on the step, and two hens pecking by the door.
+  function barnLife(c,camera,time,g){
+    const spin=time*2.2+gustTravel(time)*5;
+    for(const b of [{x:566,top:92,lx:408,ly:61,lamp:true},{x:1305,top:96,lx:1108,ly:73,lamp:false}]){
+      let x=b.x-camera;if(x>-40&&x<WIDTH+40){px(c,x-1,b.top,3,211-b.top,'#5c5238');px(c,x-1,b.top+1,1,210-b.top,'#7a6c4a');px(c,x-4,b.top+2,9,2,'#5c5238');
+        for(let k=0;k<4;k++){const a=spin+k*Math.PI/2,ex=x+Math.cos(a)*16,ey=b.top+Math.sin(a)*16;line(c,x,b.top,ex,ey,'#8c7a52',2);px(c,ex-2,ey-2,4,4,'#a08a5a');}px(c,x-1,b.top-1,3,3,'#3a3228');}
+      x=b.lx-camera;if(x>-80&&x<WIDTH+30){for(let i=0;i<4;i++){const age=(time*.13+i*.25)%1;c.globalAlpha=(1-age)*.8;px(c,x+12+age*(45+g*30)+Math.sin(time*1.6+i*2)*3,b.ly+8+age*38+Math.sin(time*2.3+i)*2,3,1,'#cfa94f');}c.globalAlpha=1;}
+      if(!b.lamp)continue;
+      x=360-camera;if(x>-40&&x<WIDTH+40){const a=Math.sin(time*2.1)*.28*(1+g*.8),lx=x+Math.sin(a)*12,ly=143+Math.cos(a)*12,fl=.12+hash(Math.floor(time*11))*.07;
+        line(c,x,143,lx,ly,'#3a3228');px(c,lx-3,ly,7,8,'#4a3d2a');px(c,lx-2,ly+1,5,6,'#f0b850');px(c,lx-1,ly+2,3,3,'#fff0b0');px(c,lx-2,ly-2,5,2,'#3a3228');
+        c.globalAlpha=fl;px(c,lx-16,ly-12,39,34,'#ffb347');c.globalAlpha=fl*.6;shape(c,[[418-camera,205],[424-camera,205],[440-camera,217],[402-camera,217]],'#ffc060');c.globalAlpha=1;}
+      for(let k=0;k<2;k++){const ph=time*(.3+k*.07)+k*2,wx=(k?524:482)+Math.round(Math.sin(ph)*9),f=Math.cos(ph)>0?1:-1,peck=(time*1.5+k*.5)%1<.3?2:0,sx=wx-camera;if(sx>-10&&sx<WIDTH+10)chicken(c,sx,210,f,peck);}
+    }
+  }
+  // Gas station (world 1690, drawn at 2x): neon letters flicker, a plate creaks under the canopy edge, pump displays
+  // flicker, the near hose drips onto the forecourt, and the awning fringe lifts in the breeze.
+  function stationLife(c,camera,time,g){
+    const x=1690-camera;if(x<-400||x>WIDTH+700)return;
+    c.font='bold 16px monospace';c.textBaseline='alphabetic';const m=c.measureText('M'),adv=m&&m.width||10,tick=Math.floor(time*7);let lit=0;
+    for(let k=0;k<9;k++){const ch='LAST STOP'[k];if(ch===' ')continue;const on=hash(tick+k*31)>.18&&!(k===8&&Math.sin(time*.8)>.2);if(!on)continue;lit++;c.fillStyle='#f3c96a';c.fillText(ch,Math.round(x+210+k*adv),59);}
+    if(lit>4){c.globalAlpha=.06+lit*.008;px(c,x+204,43,adv*9+12,20,'#ffb85a');c.globalAlpha=1;}
+    c.save();c.translate(Math.round(x+460),71);c.rotate(Math.sin(time*1.3)*.1*(1+g));c.fillStyle='#3a3228';c.fillRect(-1,0,2,8);c.fillStyle='#6d5a3a';c.fillRect(-13,8,26,14);c.fillStyle='#c9b07a';c.fillRect(-11,10,22,10);c.fillStyle='#6b3a2a';c.font='bold 7px monospace';c.fillText('OPEN',-9,18);c.restore();
+    for(const q of [53,166]){const v=hash(Math.floor(time*9)+q);px(c,x+(q+5)*2,129,16,4,v>.86?'#2f3d35':v>.55?'#d6ef92':'#a6bd6c');}
+    const dp=(time/2.4)%1,hx=x+156,hy=193;if(dp<.35)px(c,hx,hy,1+Math.round(dp*4),1+Math.round(dp*4),'#a9c4cc');else{const fy=hy+(dp-.35)/.65*18;if(fy<210)px(c,hx,fy,2,3,'#a9c4cc');else px(c,hx-3,209,8,1,'#a9c4cc');}
+    for(let k=0;k<60;k++){const lift=Math.sin(time*4.5+k*.6)>(.4-g*.5)?-1:0;px(c,x+12+k*8,71+lift,7,3,k%2?'#a7663a':'#8a5a33');}
+  }
+  // Wrecks: embers rise under the two smoke columns, hazards blink on the car at 2760, and a rear door on the car at
+  // 4550 (1.45x, door panel at world 4649..4704 × 139..200) swings slowly on its hinge showing the cabin behind it.
+  function carLife(c,camera,time,g){
+    for(const wx of [764,2621]){const x=wx-camera;if(x<-40||x>WIDTH+40)continue;for(let i=0;i<6;i++){const age=(time*.55+i/6)%1,s=age<.5?2:1;c.globalAlpha=1-age;px(c,x+Math.sin(time*2.2+i*1.9)*5+age*12,152-age*48,s,s,i%2?'#ffb040':'#e0602a');}c.globalAlpha=1;}
+    let x=2760-camera;if(x>-200&&x<WIDTH+200&&(time%1.1)<.45){px(c,x+9,169,13,7,'#f5a23a');px(c,x+191,171,19,9,'#f5a23a');c.globalAlpha=.18;px(c,x-2,160,32,24,'#ffb050');px(c,x+184,162,34,26,'#ffb050');c.globalAlpha=1;}
+    x=4550-camera;if(x>-300&&x<WIDTH+300){const a=.55+Math.sin(time*.6)*.45,w=Math.round(55*Math.cos(a)),X=Math.round(x+99),Y=159;px(c,X,139,55,20,'#34443d');px(c,X,Y,55,41,'#2a241c');px(c,X+8,Y+10,22,18,'#5a4a36');px(c,X+8,Y+22,30,8,'#4a3c2c');
+      px(c,X,139,w,61,'#837348');px(c,X+2,141,w-4,17,'#34443d');px(c,X,Y+22,w,10,'#5b563a');px(c,X,Y+7,w,3,'#7b7252');px(c,X+w-8,Y+12,5,2,'#857b62');px(c,X+w-1,139,1,61,'#4d4530');}
+  }
+  // Checkpoint (world 3500, 2x): the two beacons sweep a cone and brighten as the beam faces the road, a loose warning
+  // plate rattles against the chain-link every few seconds, cut strands wave on the fence top, and the banner's torn edge flaps.
+  function checkpointLife(c,camera,time,g){
+    for(const wx of [3611,4023]){const x=wx-camera;if(x<-90||x>WIDTH+90)continue;const a=time*2.4+wx,cx=x+5,cy=36,dx=Math.cos(a)*70,dy=Math.sin(a)*12,face=Math.max(0,Math.sin(a));
+      c.globalAlpha=.06+face*.12;shape(c,[[cx,cy],[cx+dx-dy*.6,cy+dy+dx*.16],[cx+dx+dy*.6,cy+dy-dx*.16]],'#ffb347');c.globalAlpha=1;
+      px(c,x,31,10,10,'#5e4730');px(c,x+2,33,6,6,face>.3?'#dfa351':'#8a5a30');if(face>.6){c.globalAlpha=.2;px(c,x-6,25,22,20,'#dba046');c.globalAlpha=1;}}
+    const x=3500-camera;if(x<-760||x>WIDTH+40)return;
+    const r=(time%5)<.8?Math.round(hash(Math.floor(time*24))*2-1):0;px(c,x+540+r,150,26,18,'#8b8560');px(c,x+542+r,152,22,14,'#b8b07a');shape(c,[[x+555+r,154],[x+562+r,161],[x+555+r,168],[x+548+r,161]],'#a8402a');
+    for(const sx of [x+40,x+600])line(c,sx,99,sx+4+Math.sin(time*2+sx)*3*(1+g),121,'#8a8e66');
+    const p=[],amp=1.5+g*3;for(let a=0;a<=52;a+=4)p.push([x+520+a,78+Math.sin(time*4-a*.22)*amp*a/52]);for(let a=52;a>=0;a-=4)p.push([x+520+a,83+Math.sin(time*4-a*.22+.6)*amp*a/52]);shape(c,p,'#4f604a');
+  }
+  // Factory (world 4880, 2x): welding strobes inside the second window, a wall vent fan spins, the crane hook swings on
+  // its chain, and the tower pipe vents a puff of steam every few seconds.
+  function factoryLife(c,camera,time,g){
+    const x=4880-camera;if(x<-560||x>WIDTH+40)return;
+    const burst=Math.floor(time/3.7);if(time-burst*3.7<.6&&hash(burst+21)>.3&&hash(Math.floor(time*28))>.35){px(c,x+86,71,50,36,'#dfe9ff');c.globalAlpha=.25;px(c,x+70,60,82,58,'#cfe0ff');c.globalAlpha=1;for(let k=0;k<4;k++)px(c,x+100+hash(k+time*30)*30,80+hash(k+5+time*30)*24,1,1,'#ffffff');}
+    px(c,x+365,79,18,18,'#2f3a30');px(c,x+367,81,14,14,'#3d4a3e');for(let k=0;k<3;k++){const a=time*7+k*2.094;line(c,x+374,88,x+374+Math.cos(a)*6,88+Math.sin(a)*6,'#8a8a70');}px(c,x+373,87,3,3,'#a0a080');
+    const ca=Math.sin(time*1.1)*.1*(1+g),hx=x+440+Math.sin(ca)*46,hy=21+Math.cos(ca)*46;line(c,x+440,21,hx,hy,'#5a5a48');line(c,x+441,21,hx+1,hy,'#3e3e30');px(c,hx-1,hy,3,4,'#6e6a58');px(c,hx-4,hy+3,4,2,'#6e6a58');
+    const st=time%6;if(st<1.6){for(let i=0;i<5;i++){const age=(st-i*.12)/1.45;if(age<0||age>1)continue;c.globalAlpha=(1-age)*.5;px(c,x+432-age*22+Math.sin(time*3+i)*2,84-age*32,3+age*9,2+age*6,'#b8b6a8');}c.globalAlpha=1;}
+  }
+  // Road and fields: manhole steam in the evacuated blocks, fireflies over the farm field, reeds swaying in travelling
+  // waves that bend together in a gust, and a tumbleweed about every 20 s rolling in from somewhere ahead of the camera.
+  function roadLife(c,camera,time,g){
+    for(const wx of [3320,4480]){const x=wx-camera;if(x<-40||x>WIDTH+40)continue;px(c,x-12,297,24,3,'#2e332f');px(c,x-10,296,20,1,'#4d534b');for(let i=0;i<6;i++){const age=(time*.22+i/6)%1,s=3+age*9;c.globalAlpha=(1-age)*.2;px(c,x-s/2+Math.sin(time*.8+i*2)*5+age*8,294-age*42,s,s*.6,'#b9b7a5');}c.globalAlpha=1;}
+    if(camera<1500){
+      for(let k=0;k<15;k++){const wx=k*100+hash(k+600)*100;if((wx>270&&wx<570)||(wx>970&&wx<1300))continue;const x=wx-camera+Math.sin(time*.6+k)*5;if(x<-4||x>WIDTH+4)continue;const b=Math.sin(time*2.2+k*1.7);if(b<.45)continue;const y=140+hash(k+601)*58+Math.sin(time*.9+k)*3;c.globalAlpha=.25;px(c,x-1,y-1,3,3,'#d8f070');c.globalAlpha=1;px(c,x,y,1,1,'#eaff8a');}
+      for(let wx=Math.floor(camera/14)*14;wx<Math.min(1480,camera+WIDTH+14);wx+=14){if((wx>270&&wx<570)||(wx>970&&wx<1300))continue;const h=14+hash(wx+3)*26,sx=wx-camera,bend=Math.sin(time*2+wx*.025)*(2.5+g*6)+g*5;line(c,sx,213,sx+bend,213-h,hash(wx)>.5?'#666543':'#565838');px(c,sx+bend-1,212-h,3,2,'#807a4c');}
+    }
+    const P=20,epoch=Math.floor(time/P),t=time-epoch*P;if(tumble.epoch!==epoch){tumble.epoch=epoch;tumble.x0=camera-80+hash(epoch+77)*WIDTH*.6;}
+    if(t<14){const x=tumble.x0+t*58+(gustTravel(time)-gustTravel(epoch*P))*55-camera;if(x>-16&&x<WIDTH+16){const y=203-Math.abs(Math.sin(t*4.2))*7,rot=t*5.5;for(let k=0;k<10;k++){const a=rot+k*.628,r=4+hash(k+epoch)*3;px(c,x+Math.cos(a)*r,y+Math.sin(a)*r,2,2,k%2?'#8f7d4c':'#6e6240');}px(c,x-2,y-2,4,4,'#7a6b44');c.globalAlpha=.25;px(c,x-6,210,12,2,'#2a2a20');c.globalAlpha=1;}}
+  }
   function dynamic(c,camera,time){
+    const g=gust(time);
     // Wisps are localized at damaged vehicles and stacks; no frame-to-frame randomness.
     smoke(c,764,154,camera,time,1,.65);smoke(c,2621,154,camera,time,2,.55);smoke(c,4968,6,camera,time,3,1.1);smoke(c,5060,6,camera,time+.6,4,.85);
-    flag(c,2150,2,camera,time,'#ab7945',32);flag(c,4180,54,camera,time,'#8d4932');flag(c,6080,160,camera,time,'#848755');
-    for(const wx of [3611,4023]){const x=wx-camera;if(x<-12||x>WIDTH+12)continue;px(c,x,31,10,10,'#5e4730');if(Math.sin(time*3.5+wx)>0.65){px(c,x+2,31,6,5,'#dfa351');c.globalAlpha=.16;px(c,x-6,25,22,18,'#dba046');c.globalAlpha=1;}}
+    flag(c,2150,2,camera,time,'#ab7945',32,g);flag(c,4180,54,camera,time,'#8d4932',51,g);flag(c,6080,160,camera,time,'#848755',51,g);
+    roadLife(c,camera,time,g);
     // Wind is shared across the roadside, with an offset along the world for traveling gusts.
-    const from=Math.floor(camera/23)*23;for(let wx=from;wx<camera+WIDTH+23;wx+=23){if((wx>1700&&wx<2250)||(wx>3470&&wx<4240))continue;const h=5+hash(wx)*11,wind=Math.sin(time*1.7+wx*.031)*2,sx=wx-camera,y=215;line(c,sx,y,sx+wind,y-h,'#5e5d3e');line(c,sx,y,sx-3+wind,y-h*.65,'#767048');if(hash(wx+1)>.6)px(c,sx+wind-1,y-h-1,3,2,'#847a4c');}
+    const from=Math.floor(camera/23)*23;for(let wx=from;wx<camera+WIDTH+23;wx+=23){if((wx>1700&&wx<2250)||(wx>3470&&wx<4240))continue;const h=5+hash(wx)*11,wind=Math.sin(time*1.7+wx*.031)*2+g*3,sx=wx-camera,y=215;line(c,sx,y,sx+wind,y-h,'#5e5d3e');line(c,sx,y,sx-3+wind,y-h*.65,'#767048');if(hash(wx+1)>.6)px(c,sx+wind-1,y-h-1,3,2,'#847a4c');}
     // Single drifting leaves, widely spaced; particle timing follows world time.
     for(let i=0;i<5;i++){const period=11+i*2,progress=(time/period+i*.213)%1;const wx=Math.floor(camera/900)*900+progress*1000;const x=wx-camera;if(x<-20||x>WIDTH+20)continue;const y=162+Math.sin(progress*9+i)*23+i*7;px(c,x,y,3,1,i%2?'#8a7a46':'#9c8a55');}
     // A restrained, distant flock passes above the horizon.
     const flockSpan=WIDTH+310;for(let i=0;i<4;i++){const x=((time*5+i*13+311-camera*.12)%flockSpan+flockSpan)%flockSpan-140,y=46+Math.sin(time*.3+i)*4+i*2;const flap=Math.sin(time*5+i)>.0?1:-1;line(c,x-2,y+flap,x,y,'#685b3b');line(c,x,y,x+2,y+flap,'#685b3b');}
+    barnLife(c,camera,time,g);stationLife(c,camera,time,g);carLife(c,camera,time,g);checkpointLife(c,camera,time,g);factoryLife(c,camera,time,g);
   }
   function draw(c,camera,time){
     sky(c,camera,time);
     for(let index=Math.floor(camera/TILE);index<=Math.floor((camera+WIDTH)/TILE);index++)c.drawImage(getTile(index),Math.round(index*TILE-camera),0);
-    utilities(c,camera);
+    utilities(c,camera,time);
     dynamic(c,camera,time);
   }
   // Full-frame colour grade: warm light from the sunset sky, cool shadow on the road, then a warm-dark vignette.
@@ -183,12 +285,20 @@ const worldArt = (() => {
     if(g.tint){c.save();c.globalCompositeOperation='soft-light';c.fillStyle=g.tint;c.fillRect(0,0,WIDTH,HEIGHT);c.restore();}
     if(g.vignette){c.fillStyle=g.vignette;c.fillRect(0,0,WIDTH,HEIGHT);}
   }
-  function foreground(c,camera,time){for(let wx=Math.floor(camera/71)*71;wx<camera+WIDTH+71;wx+=71){const x=wx-camera,h=6+hash(wx)*5,wind=Math.sin(time*1.5+wx)*1.4;line(c,x,330,x+wind,330-h,'#4e5238');line(c,x+2,330,x+5+wind,329-h*.6,'#6a6848');if(hash(wx+9)>.7)px(c,x+16,329,6,1,'#8a8262');}}
+  // In front of the action: kerb grass, a plastic bag tumbling across the road at knee height about every 13 s,
+  // and dust blown along the road surface while a gust lasts.
+  function foreground(c,camera,time){const g=gust(time);
+    for(let wx=Math.floor(camera/71)*71;wx<camera+WIDTH+71;wx+=71){const x=wx-camera,h=6+hash(wx)*5,wind=Math.sin(time*1.5+wx)*1.4+g*3;line(c,x,330,x+wind,330-h,'#4e5238');line(c,x+2,330,x+5+wind,329-h*.6,'#6a6848');if(hash(wx+9)>.7)px(c,x+16,329,6,1,'#8a8262');}
+    const P=13,epoch=Math.floor(time/P),t=time-epoch*P;if(bag.epoch!==epoch){bag.epoch=epoch;bag.x0=camera-40+hash(epoch+91)*WIDTH*.5;bag.y0=262+hash(epoch+92)*30;}
+    if(t<9){const x=bag.x0+t*75+(gustTravel(time)-gustTravel(epoch*P))*70+Math.sin(t*2.7)*6-camera;if(x>-12&&x<WIDTH+12){const y=bag.y0+Math.sin(t*3.1)*9+Math.sin(t*7)*3,fl=Math.sin(t*11)*2;px(c,x,y,5,3,'#d8d2b8');px(c,x+3,y-2+fl,4,3,'#c9c3a8');px(c,x+1,y+2-fl,3,2,'#e2dcc2');}}
+    if(g>0){const t=(time%15)/2,gi=Math.floor(time/15);c.globalAlpha=g*.35*(1-t);for(let k=0;k<7;k++){const x=hash(k+gi*3)*(WIDTH+80)-40+t*260,y=232+hash(k+gi*3+50)*84;px(c,x,y,8+k,2,'#9a8f6a');}c.globalAlpha=1;}
+  }
   function setWidth(w){if(Number.isFinite(w)&&w>0)WIDTH=Math.round(w);}
   function width(){return WIDTH;}
-  // Doors that lead off the road. The store door is the gas station's shop entrance (landmark x 1690 + local
-  // door centre 263 at 2x = 2216, 68 px wide); game.js reads this to place the portal marker and the prompt.
-  const portals=[{x:2216,w:68,target:'store',targetX:110,label:'进入商店'}];
+  // Doors that lead off the road. The barn door is the first barn's big door (landmark x 300 + local door 38..82 at
+  // 2x = world 376..464, centre 420, 88 px wide). The store door is the gas station's shop entrance (landmark x 1690 +
+  // local door centre 263 at 2x = 2216, 68 px wide); game.js reads this to place the portal marker and the prompt.
+  const portals=[{x:420,w:88,target:'barn',targetX:120,label:'进入谷仓'},{x:2216,w:68,target:'store',targetX:110,label:'进入商店'}];
   return {draw,foreground,grade,sectorAt,setWidth,width,portals};
 })();
 
