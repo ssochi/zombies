@@ -67,6 +67,50 @@ function resetArsenal(){weaponInventory={};for(const weapon of Object.values(WEA
 resetArsenal();
 let viewX=0,furthestX=142,nextEncounterX=900,evacuation=false;
 const claimedSupplyStops=new Set();
+// ---- Areas -------------------------------------------------------------------------------------
+// The road is one area; interiors (world.js INTERIORS) are others. Portals join them: a door on the road
+// leads into a store, the store's exit leads back to the door. Every area keeps its own actors, corpses,
+// blood and loot, so a cleared room stays cleared and the horde outside waits where you left it.
+const ROAD_PORTALS=[{x:1903,w:44,target:'store',targetX:110,label:'进入商店'}];
+let area='road',areaTransition=null;
+const areaStates={};
+function interiorDef(id){return typeof INTERIORS!=='undefined'&&INTERIORS&&INTERIORS[id]||null;}
+function areaLength(){if(area==='road')return WORLD_LENGTH;const def=interiorDef(area);return def?def.length:640;}
+function areaPortals(){
+  if(area==='road')return ROAD_PORTALS;
+  const def=interiorDef(area),back=areaStates[area]&&areaStates[area].returnX;
+  const exits=def&&def.exits&&def.exits.length?def.exits:[{x:60,w:44,label:'离开'}];
+  return exits.map(e=>({x:e.x,w:e.w,label:e.label,target:'road',targetX:Number.isFinite(back)?back:ROAD_PORTALS[0].x}));
+}
+function nearPortal(){if(state!=='playing'||areaTransition)return null;for(const p of areaPortals())if(Math.abs(player.x-p.x)<=p.w/2+12)return p;return null;}
+function currentSector(){if(area==='road')return getWorldSector(player.x);const def=interiorDef(area);return def?{name:def.name,code:def.code}:{name:'室内',code:'--'};}
+function saveArea(){areaStates[area]=Object.assign(areaStates[area]||{},{zombies,corpses,rigs,decals,pickups,particles,viewX,spawnLeft,spawnTimer,waveBreak,packLeft});}
+function loadArea(id,x,returnX){
+  let s=areaStates[id];
+  if(!s){s={zombies:[],corpses:[],rigs:[],decals:[],pickups:[],particles:[],spawnLeft:0,spawnTimer:999,waveBreak:0,packLeft:0,viewX:0,seeded:false};areaStates[id]=s;}
+  if(Number.isFinite(returnX))s.returnX=returnX;
+  area=id;zombies=s.zombies;corpses=s.corpses;rigs=s.rigs;decals=s.decals;pickups=s.pickups;particles=s.particles;bullets=[];resetSpecials();meleeSwing=null;
+  if(id==='road'){spawnLeft=s.spawnLeft;spawnTimer=s.spawnTimer;waveBreak=s.waveBreak;packLeft=s.packLeft;}else{spawnLeft=0;spawnTimer=999;waveBreak=0;}
+  player.x=x;player.vx=0;player.vy=0;player.flinch=0;
+  viewX=clamp(player.x-cameraLead(),0,Math.max(0,areaLength()-W));if(!touchFiring)pointer.x=pointer.screenX+viewX;
+  const def=interiorDef(id);
+  if(def&&!s.seeded){
+    s.seeded=true;
+    for(const sp of def.spawns){const z=addZombie();z.x=sp.x;z.y=clamp(sp.y,LANE_TOP,LANE_BOTTOM);z.scale=.8+(z.y-LANE_TOP)/400;z.pose=makeZombiePose(z);}
+    for(const l of def.loot||[])pickups.push({x:l.x,y:l.y,type:l.type,life:1e9});
+  }
+  player.pose=makePlayerPose().pose;
+}
+function usePortal(){
+  const p=nearPortal();if(!p)return false;
+  areaTransition={t:0,target:p.target,x:p.targetX,returnX:area==='road'?player.x:null,switched:false};
+  pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();sound('rack');return true;
+}
+function updateAreaTransition(rawDt){
+  const tr=areaTransition;if(!tr)return;tr.t+=rawDt;
+  if(!tr.switched&&tr.t>=.3){tr.switched=true;saveArea();loadArea(tr.target,tr.x,tr.returnX);announce(currentSector().name,2);}
+  if(tr.t>=.6)areaTransition=null;
+}
 function switchWeapon(id){
   if(!WEAPONS[id]||id===selectedWeapon||state==='over'||state==='won')return;
   weaponInventory[selectedWeapon]={ammo:player.ammo,reserve:player.reserve};selectedWeapon=id;
@@ -112,7 +156,7 @@ let best=0,soundEnabled=true,audioCtx=null;
 let stats={shots:0,hits:0,headshots:0,severed:0};
 try{best=Number(localStorage.getItem('last-light-best'))||0;}catch{}
 // All UI-facing state lives here; ui.js draws it inside the canvas (the page has no other DOM).
-const HUD={mode:'等待部署',status:'向东突围 · 每个区域边界提供补给',waveStatus:'保持警戒',notice:'',killPulse:0,panel:{tag:'四个区域。一条撤离路线。',title:'穿过这片死地。',copy:'向东突围，沿途补给。注意疾行者、重装暴君与腐液。',button:'开始生存',hint:'WASD 移动 · 左键攻击 · 1–5 / Q 切换武器'}};
+const HUD={prompt:'',mode:'等待部署',status:'向东突围 · 每个区域边界提供补给',waveStatus:'保持警戒',notice:'',killPulse:0,panel:{tag:'四个区域。一条撤离路线。',title:'穿过这片死地。',copy:'向东突围，沿途补给。注意疾行者、重装暴君与腐液。',button:'开始生存',hint:'WASD 移动 · 左键攻击 · 1–5 / Q 切换武器'}};
 resizeGame();
 if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){window.addEventListener('resize',resizeGame);window.addEventListener('orientationchange',resizeGame);}
 if(typeof document!=='undefined'&&typeof document.addEventListener==='function')document.addEventListener('fullscreenchange',()=>{resizeGame();if(typeof requestAnimationFrame==='function')requestAnimationFrame(resizeGame);});
@@ -134,7 +178,7 @@ player.pose=makePlayerPose().pose;
 function saveBest(){if(kills>best){best=kills;try{localStorage.setItem('last-light-best',best);}catch{}}}
 function beginWave(){spawnLeft=12+wave*6;spawnTimer=.1;packLeft=Math.floor(rand(3,6));waveBreak=0;shake=Math.max(shake,3.5);cameraVY-=70;announce(`第 ${String(wave).padStart(2,'0')} 波 · 尸潮来袭`,2.6);HUD.waveStatus='尸潮来袭';}
 function startGame(){
-  resizeGame();initAudio();resetArsenal();resetSpecials();viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
+  resizeGame();initAudio();resetArsenal();resetSpecials();area='road';areaTransition=null;for(const k of Object.keys(areaStates))delete areaStates[k];viewX=0;furthestX=142;nextEncounterX=900;evacuation=false;claimedSupplyStops.clear();Object.assign(player,{x:142,y:296,hp:100,ammo:WEAPONS.rifle.magSize,reserve:WEAPONS.rifle.reserve,stamina:100,walk:0,moving:false,face:1,inv:0,vx:0,vy:0,kick:0,kickVelocity:0,climb:0,climbVelocity:0,heat:0,smokeTimer:0,sprinting:false});
   keys.clear();pointer.down=false;touchFiring=false;triggerLatched=false;zombies=[];bullets=[];particles=[];corpses=[];pickups=[];rigs=[];decals=[];physicsAccumulator=0;
   elapsed=0;kills=0;wave=1;meleeSwing=null;triggerLatched=false;shotCooldown=0;reloadTime=0;shake=0;hitStop=0;muzzle=0;shotSerial=0;cameraX=cameraY=cameraVX=cameraVY=0;killFlash=0;slowMo=0;hurtFlash=0;lastKillTime=-9;killStreak=0;
   stats={shots:0,hits:0,headshots:0,severed:0};
@@ -235,7 +279,7 @@ function killZombie(z,part,dir,weaponId=z.lastWeaponId){
   killStreak=elapsed-lastKillTime<1.4?killStreak+1:1;lastKillTime=elapsed;
   if(killStreak>=2)textParticle(headPoint.x,headPoint.y-26,`x${killStreak}`,killStreak>=5?'#ff7a4a':'#ffd58a',9+Math.min(4,killStreak));
   HUD.killPulse=.16;
-  if(kills%5===0)pickups.push({x:clamp(z.x,22,WORLD_LENGTH-22),y:z.y,type:kills%10===0?'health':'ammo',life:25});
+  if(kills%5===0)pickups.push({x:clamp(z.x,22,areaLength()-22),y:z.y,type:kills%10===0?'health':'ammo',life:25});
   // Last body of a wave: brief slow motion (separate from hit-stop) so the final fling plays out.
   if(spawnLeft<=0&&zombies.every(o=>o.dead)){slowMo=.9;killFlash=Math.max(killFlash,.3);shake=Math.max(shake,3);}
 }
@@ -290,10 +334,10 @@ function updatePlayer(dt,recoilDt=dt){
   const p=player;p.sprinting=keys.has('shift')&&p.stamina>1&&Boolean(dx||dy);const speed=p.sprinting?106:64;
   p.stamina=clamp(p.stamina+(p.sprinting?-32:19)*dt,0,100);if(dx&&dy){dx*=.707;dy*=.707;}
   const response=1-Math.exp(-17*dt);p.vx=mix(p.vx,dx*speed,response);p.vy=mix(p.vy,dy*speed*.68,response);
-  p.x=clamp(p.x+p.vx*dt,24,WORLD_LENGTH-30);p.y=clamp(p.y+p.vy*dt,LANE_TOP,LANE_BOTTOM+2);p.moving=Math.hypot(p.vx,p.vy)>3;
+  p.x=clamp(p.x+p.vx*dt,24,areaLength()-30);p.y=clamp(p.y+p.vy*dt,LANE_TOP,LANE_BOTTOM+2);p.moving=Math.hypot(p.vx,p.vy)>3;
   const previousStep=Math.floor(p.walk/Math.PI);p.walk+=Math.hypot(p.vx,p.vy)*dt/79*TAU*(p.vx*p.face<-.1?-1:1);
   if(Math.floor(p.walk/Math.PI)!==previousStep&&p.moving){dust(p.x,p.y+1,p.sprinting?4:2);sound('step');}
-  furthestX=Math.max(furthestX,p.x);viewX=mix(viewX,clamp(p.x-cameraLead(),0,WORLD_LENGTH-W),1-Math.exp(-7*dt));if(!touchFiring)pointer.x=pointer.screenX+viewX;
+  if(area==='road')furthestX=Math.max(furthestX,p.x);viewX=mix(viewX,clamp(p.x-cameraLead(),0,Math.max(0,areaLength()-W)),1-Math.exp(-7*dt));if(!touchFiring)pointer.x=pointer.screenX+viewX;
   [p.flinch,p.flinchV]=springStep(p.flinch,p.flinchV,14,dt);if(Math.abs(p.flinch)<.002)p.flinch=0;
   if(meleeSwing)p.face=meleeSwing.face;else if(Math.abs(pointer.x-p.x)>5)p.face=pointer.x>=p.x?1:-1;
   const weapon=getWeapon();
@@ -390,6 +434,7 @@ function update(rawDt){
   if(state!=='playing')return;
   let dt=rawDt;if(hitStop>0){hitStop=Math.max(0,hitStop-rawDt);if(HIT_STOP_ENABLED)dt*=.12;}
   if(slowMo>0){slowMo=Math.max(0,slowMo-rawDt);dt*=.25;}
+  updateAreaTransition(rawDt);if(areaTransition){elapsed+=rawDt;return;}
   elapsed+=rawDt;rawTime+=rawDt;worldTime+=dt;shotCooldown=Math.max(0,shotCooldown-rawDt);muzzle=Math.max(0,muzzle-rawDt);hitMarker=Math.max(0,hitMarker-rawDt);killFlash=Math.max(0,killFlash-rawDt);hurtFlash=Math.max(0,hurtFlash-rawDt);
   shake=Math.max(0,shake-rawDt*11);player.inv=Math.max(0,player.inv-dt);
   cameraVX+=(-cameraX*150-cameraVX*20)*rawDt;cameraVY+=(-cameraY*150-cameraVY*20)*rawDt;cameraX+=cameraVX*rawDt;cameraY+=cameraVY*rawDt;
@@ -405,7 +450,7 @@ function update(rawDt){
   if(touchFiring){let nearest=null,bestDistance=Infinity;for(const z of zombies){const d=Math.hypot(z.x-player.x,z.y-player.y);if(d<bestDistance){nearest=z;bestDistance=d;}}if(nearest){pointer.x=nearest.pose.shoulder.x;pointer.y=(nearest.pose.shoulder.y+nearest.pose.hip.y)/2;}pointer.down=true;}
   updatePlayer(dt,rawDt);if(pointer.down)shoot();updateMelee(dt);
   // Hordes arrive in packs of 3-5 with short gaps, then a lull so the crowd surges instead of trickling.
-  if(spawnLeft>0&&zombies.length<32){spawnTimer-=dt;if(spawnTimer<=0){
+  if(area==='road'&&spawnLeft>0&&zombies.length<32){spawnTimer-=dt;if(spawnTimer<=0){
     const z=addZombie();spawnLeft--;
     if(z.kind==='brute'){shake=Math.max(shake,3.5);cameraVY-=70;sound('growl',z.x);}
     if(packLeft>1){packLeft--;spawnTimer=.12;}else{packLeft=Math.floor(rand(3,6));spawnTimer=rand(2,3)-Math.min(.6,wave*.08);}
@@ -413,16 +458,19 @@ function update(rawDt){
   updateZombies(dt);if(state!=='playing')return;updateBullets(dt);updateEffects(dt);updateHostileProjectiles(dt,specialAPI());if(state!=='playing')return;
   zombies=zombies.filter(z=>Math.abs(z.x-player.x)<1300);
   for(const p of pickups){p.life-=dt;if(Math.hypot(player.x-p.x,player.y-p.y)<28){if(p.type==='ammo'){supplyAmmo();announce('全武器弹药补给',1.2);}else{player.hp=Math.min(100,player.hp+35);announce('生命值 +35',1.2);}p.life=0;sound('pickup');}}pickups=pickups.filter(p=>p.life>0);
-  updateJourney();
-  if(!evacuation&&!spawnLeft&&!zombies.length){if(!waveBreak){waveBreak=3.5;supplyAmmo();player.hp=Math.min(100,player.hp+15);announce('区域肃清 · 全武器补给 / 生命 +15',3);HUD.waveStatus='整备时间';}waveBreak-=dt;if(waveBreak<=0){wave++;beginWave();}}
+  if(area==='road')updateJourney();
+  const portal=nearPortal();HUD.prompt=portal?portal.label:'';
+  if(area==='road'&&!evacuation&&!spawnLeft&&!zombies.length){if(!waveBreak){waveBreak=3.5;supplyAmmo();player.hp=Math.min(100,player.hp+15);announce('区域肃清 · 全武器补给 / 生命 +15',3);HUD.waveStatus='整备时间';}waveBreak-=dt;if(waveBreak<=0){wave++;beginWave();}}
   hudAccumulator+=rawDt;if(hudAccumulator>.08){updateHUD();hudAccumulator=0;}
 }
 function draw(){
   ctx.save();ctx.fillStyle='#403e31';ctx.fillRect(0,0,W,H);
   // Shake rides rawTime (hit-stop would freeze worldTime) and stays sub-pixel; the camera offset itself is rounded.
   if(state==='playing')ctx.translate(Math.round(cameraX)+Math.sin(rawTime*95)*shake,Math.round(cameraY)+Math.cos(rawTime*113)*shake*.55);
-  drawWorld(ctx,viewX,worldTime);
+  if(area==='road')drawWorld(ctx,viewX,worldTime);else if(typeof drawInterior==='function')drawInterior(ctx,area,viewX,worldTime);else{ctx.fillStyle='#1a1d17';ctx.fillRect(0,0,W,H);}
   ctx.save();ctx.translate(-Math.round(viewX),0);
+  // Portal markers: a bobbing brass chevron over each door / junction.
+  for(const p of areaPortals()){const bob=Math.round(Math.sin(worldTime*3)*2);rect(ctx,p.x-1,228+bob,3,6,'#e0b64f');rect(ctx,p.x-3,234+bob,7,2,'#e0b64f');rect(ctx,p.x-2,236+bob,5,1,'#e0b64f');rect(ctx,p.x-1,237+bob,3,1,'#e0b64f');}
   drawSpecialProjectiles(ctx,'ground');
   if(typeof drawDecals==='function')drawDecals(ctx);else for(const d of decals)rect(ctx,d.x,d.y,d.size*1.5,Math.max(1,d.size*.45),d.color);
   for(const p of pickups){const bob=Math.sin(worldTime*4)*2;rect(ctx,p.x-7,p.y-8+bob,14,9,'#303b24');rect(ctx,p.x-6,p.y-7+bob,12,7,p.type==='health'?'#91a15c':'#a78f52');if(p.type==='health'){rect(ctx,p.x-1,p.y-7+bob,2,7,'#e4e8bf');rect(ctx,p.x-3,p.y-5+bob,6,2,'#e4e8bf');}else{for(let i=0;i<3;i++)rect(ctx,p.x-4+i*3,p.y-6+bob,1,5,'#e5cb87');}}
@@ -448,8 +496,9 @@ function draw(){
 
   }
   ctx.restore();
-  drawWorldForeground(ctx,viewX,worldTime);
-  if(typeof drawWorldGrade==='function')drawWorldGrade(ctx);
+  if(area==='road')drawWorldForeground(ctx,viewX,worldTime);else if(typeof drawInteriorForeground==='function')drawInteriorForeground(ctx,area,viewX,worldTime);
+  if(area==='road'){if(typeof drawWorldGrade==='function')drawWorldGrade(ctx);}else if(typeof interiorGrade==='function')interiorGrade(ctx,area);else if(typeof drawWorldGrade==='function')drawWorldGrade(ctx);
+  if(areaTransition){const t=areaTransition.t,a=t<.3?t/.3:1-(t-.3)/.3;ctx.fillStyle=`rgba(11,12,9,${clamp(a,0,1).toFixed(3)})`;ctx.fillRect(0,0,W,H);}
   // Kill flash: a brief warm wash (peach tint on headshots) that punches every kill.
   if(killFlash>0){const a=Math.min(1,killFlash/.15)*.22;ctx.fillStyle=killFlashHead?`rgba(255,180,140,${a})`:`rgba(255,240,210,${a})`;ctx.fillRect(0,0,W,H);}
   // Player damage: 90 ms full red flash, then a fading tint through the invulnerability window.
@@ -483,7 +532,7 @@ canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')e.preventDe
 window.addEventListener('pointerup',e=>{if(uiConsumes('up',e))return;if(e.target===canvas){pointer.down=false;touchFiring=false;triggerLatched=false;}});
 window.addEventListener('pointercancel',e=>{if(uiConsumes('cancel',e))return;pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))e.preventDefault();if(e.repeat&&['escape',' ','r','enter'].includes(key))return;if(key==='escape'||key===' '){pauseGame();return;}if(key==='enter'&&(state==='ready'||state==='over'||state==='won')){startGame();return;}if(state!=='playing')return;keys.add(key);if(key==='r')reload();if(['1','2','3','4','5'].includes(key))switchWeapon(WEAPON_ORDER[Number(key)-1]);if(key==='q'&&!e.repeat)switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(selectedWeapon)+1)%WEAPON_ORDER.length]);});
+window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))e.preventDefault();if(e.repeat&&['escape',' ','r','enter'].includes(key))return;if(key==='escape'||key===' '){pauseGame();return;}if(key==='enter'&&(state==='ready'||state==='over'||state==='won')){startGame();return;}if(state!=='playing')return;keys.add(key);if(key==='r')reload();if(key==='e')usePortal();if(['1','2','3','4','5'].includes(key))switchWeapon(WEAPON_ORDER[Number(key)-1]);if(key==='q'&&!e.repeat)switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(selectedWeapon)+1)%WEAPON_ORDER.length]);});
 window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();pointer.down=false;triggerLatched=false;if(state==='playing')pauseGame();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pauseGame();});

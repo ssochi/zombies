@@ -174,7 +174,7 @@ function drawUI(c,viewInfo){
   pixelText(c,'/100',16+pixelTextWidth(String(hp),2)+6,13,1,C.muted);
   barTrack(c,7,23,84,5,null,player.hp/100,hp<30?C.blood:C.health);
   barTrack(c,7,30,84,2,null,player.stamina/100,C.stamina);
-  const sector=getWorldSector(player.x);
+  const sector=typeof currentSector==='function'?currentSector():getWorldSector(player.x);
   cnText(c,sector.name,7,35,9,C.muted);pixelText(c,'SECTOR '+sector.code,7+cnWidth(c,sector.name,9)+5,37,1,C.brassDim);
 
   // Mission (top-center): wave, status chip, route
@@ -208,6 +208,15 @@ function drawUI(c,viewInfo){
 
   // Notice (center)
   if(noticeTime>0&&HUD.notice){c.globalAlpha=Math.min(1,noticeTime*3);cnText(c,HUD.notice,cx,64,12,'#f3ebcc','center');c.globalAlpha=1;}
+
+  // Portal prompt: floats over the player's head when a door / junction is in reach.
+  if(playing&&HUD.prompt){
+    const px0=Math.round(player.x-viewX),head=player.pose&&player.pose.head?player.pose.head.y:player.y-80,py=Math.round(head)-30+Math.round(Math.sin(worldTime*4)*1.5);
+    const tw=Math.ceil(cnWidth(c,HUD.prompt,9))+(uiTouch?12:26),bx0=px0-Math.round(tw/2);
+    plate(c,bx0,py,tw,15,C.plate,C.brass,C.brassDim);
+    if(!uiTouch){px(c,bx0+4,py+3,9,9,C.brass);pixelText(c,'E',bx0+6,py+4,1,C.ink,null);cnText(c,HUD.prompt,bx0+18,py+3,9,C.text);}
+    else cnText(c,HUD.prompt,bx0+6,py+3,9,C.text);
+  }
 
   // Weapon rig (bottom-center)
   const slotW=uiTouch?26:46,slotH=uiTouch?16:20,gap=3,rigW=WEAPON_ORDER.length*slotW+(WEAPON_ORDER.length-1)*gap;
@@ -253,6 +262,7 @@ function drawUI(c,viewInfo){
     cnText(c,melee?'挥击':weapon.semiAuto?'点射':'开火',fx+fs/2,fy+fs/2-6,10,'#fff2e6','center');
     uiHit(fx,fy,fs,fs,{down:()=>touchFireStart(),up:()=>touchFireEnd()});
     if(!melee){const rx=fx-4-34,ry=fy+fs-18;plate(c,rx,ry,34,18,C.plate);cnText(c,'换弹',rx+17,ry+4,9,C.text,'center');uiHit(rx,ry,34,18,{down:()=>reload()});}
+    if(HUD.prompt&&playing){const ex=fx-4-34,ey=fy-8;plate(c,ex,ey,34,18,'#2b2814',C.brass,C.brassDim);cnText(c,'进入',ex+17,ey+4,9,C.brass,'center');uiHit(ex,ey,34,18,{down:()=>typeof usePortal==='function'&&usePortal()});}
   }
 
   // Mission board
