@@ -7,6 +7,9 @@ const UI_COLORS={
   text:'#d8d4b8',muted:'#8d917b',brass:'#e0b64f',brassDim:'#9a7d33',blood:'#c2402a',health:'#a9c25b',stamina:'#86a9b3',route:'#d7c98a',ink:'#1c1a0f'
 };
 const UI_FONT_CN='"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif';
+// K = device pixels per logical pixel (view.k from game.js). Every primitive snaps logical coordinates to whole device pixels.
+let K=1;
+function uiPix(){return K;}
 
 // 5x7 bitmap font for digits, capitals and a few symbols. Drawn as rects so it stays crisp at any scale.
 const PIXEL_GLYPHS=(()=>{
@@ -68,10 +71,10 @@ function pixelText(c,text,x,y,scale=1,color=UI_COLORS.text,shadow=UI_COLORS.void
   if(align==='right')x-=width;else if(align==='center')x-=Math.floor(width/2);
   x=Math.round(x);y=Math.round(y);
   for(const pass of shadow?[[shadow,scale],[color,0]]:[[color,0]]){
-    c.fillStyle=pass[0];let cx=x;
+    let cx=x;
     for(const ch of text){
       const rows=PIXEL_GLYPHS[ch];
-      if(rows)for(let r=0;r<7;r++)for(let col=0;col<5;col++)if(rows[r][col]==='#')c.fillRect(cx+col*scale+pass[1],y+r*scale+pass[1],scale,scale);
+      if(rows)for(let r=0;r<7;r++)for(let col=0;col<5;col++)if(rows[r][col]==='#')px(c,cx+col*scale+pass[1],y+r*scale+pass[1],scale,scale,pass[0]);
       cx+=6*scale;
     }
   }
@@ -82,35 +85,35 @@ function pixelText(c,text,x,y,scale=1,color=UI_COLORS.text,shadow=UI_COLORS.void
 const cnCache=new Map();
 function hexRgb(hex){const n=parseInt(hex.slice(1,7),16);return [(n>>16)&255,(n>>8)&255,n&255];}
 function cnBitmap(c,text,size,color,weight){
-  if(size<=10)weight='normal';
-  const key=`${text}|${size}|${color}|${weight}`;if(cnCache.has(key))return cnCache.get(key);
+  const key=`${text}|${size}|${color}|${weight}|${K.toFixed(3)}`;if(cnCache.has(key))return cnCache.get(key);
   if(cnCache.size>400)cnCache.clear();
   let entry=false;
   try{
-    const w=Math.ceil(cnWidth(c,text,size,weight))+3,h=Math.ceil(size*1.35)+3;
+    const k=uiPix(),fs=Math.round(size*k);if(fs<16)weight='normal';
+    const w=Math.ceil(cnWidth(c,text,size,weight)*k)+4,h=Math.ceil(fs*1.35)+4;
     const off=document.createElement('canvas');off.width=Math.max(1,w);off.height=Math.max(1,h);
-    const oc=off.getContext('2d');oc.font=`${weight} ${size}px ${UI_FONT_CN}`;oc.textBaseline='top';oc.fillStyle='#fff';oc.fillText(text,1,1);
+    const oc=off.getContext('2d');oc.font=`${weight} ${fs}px ${UI_FONT_CN}`;oc.textBaseline='top';oc.fillStyle='#fff';oc.fillText(text,2,2);
     const img=oc.getImageData(0,0,off.width,off.height);
-    if(img&&img.data){const d=img.data,[r,g,b]=hexRgb(color);const cut=size<=10?72:104;for(let i=0;i<d.length;i+=4){if(d[i+3]>=cut){d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;}else d[i+3]=0;}oc.putImageData(img,0,0);entry={canvas:off,w:off.width,h:off.height};}
+    if(img&&img.data){const d=img.data,[r,g,b]=hexRgb(color);const cut=weight==='bold'?112:88;for(let i=0;i<d.length;i+=4){if(d[i+3]>=cut){d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;}else d[i+3]=0;}oc.putImageData(img,0,0);entry={canvas:off,w:off.width,h:off.height,k};}
   }catch{entry=false;}
   cnCache.set(key,entry);return entry;
 }
 function cnText(c,text,x,y,size=9,color=UI_COLORS.text,align='left',weight='bold',shadow=UI_COLORS.void){
-  if(!text)return;weight=weight||'bold';if(size<=10)weight='normal';
+  if(!text)return;weight=weight||'bold';
   const width=cnWidth(c,text,size,weight);
   if(align==='right')x-=width;else if(align==='center')x-=width/2;
-  x=Math.round(x)-1;y=Math.round(y)-1;
   const bitmap=cnBitmap(c,text,size,color,weight);
   if(bitmap){
-    if(shadow){const sh=cnBitmap(c,text,size,shadow,weight);if(sh)c.drawImage(sh.canvas,x+1,y+1);}
-    c.drawImage(bitmap.canvas,x,y);return;
+    const dx=Math.round(x*K)-2,dy=Math.round(y*K)-2,so=Math.max(1,Math.round(K*.5));
+    if(shadow){const sh=cnBitmap(c,text,size,shadow,weight);if(sh)c.drawImage(sh.canvas,dx+so,dy+so);}
+    c.drawImage(bitmap.canvas,dx,dy);return;
   }
-  c.font=`${weight} ${size}px ${UI_FONT_CN}`;c.textBaseline='top';c.textAlign='left';
-  if(shadow){c.fillStyle=shadow;c.fillText(text,x+2,y+2);}
-  c.fillStyle=color;c.fillText(text,x+1,y+1);
+  c.font=`${weight} ${Math.round(size*K)}px ${UI_FONT_CN}`;c.textBaseline='top';c.textAlign='left';
+  if(shadow){c.fillStyle=shadow;c.fillText(text,Math.round(x*K)+1,Math.round(y*K)+1);}
+  c.fillStyle=color;c.fillText(text,Math.round(x*K),Math.round(y*K));
 }
-function cnWidth(c,text,size=8,weight='bold'){if(size<=10)weight='normal';c.font=`${weight} ${size}px ${UI_FONT_CN}`;const m=c.measureText(text);return m&&Number.isFinite(m.width)?m.width:text.length*size;}
-function px(c,x,y,w,h,color){c.fillStyle=color;c.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));}
+function cnWidth(c,text,size=8,weight='bold'){const fs=Math.round(size*K);if(fs<16)weight='normal';c.font=`${weight} ${fs}px ${UI_FONT_CN}`;const m=c.measureText(text);return (m&&Number.isFinite(m.width)?m.width:text.length*fs)/K;}
+function px(c,x,y,w,h,color){const x0=Math.round(x*K),y0=Math.round(y*K),x1=Math.round((x+w)*K),y1=Math.round((y+h)*K);c.fillStyle=color;c.fillRect(x0,y0,Math.max(1,x1-x0),Math.max(1,y1-y0));}
 // Worn metal plate: 1px void outline, fill, light top/left bevel, dark bottom/right bevel.
 function plate(c,x,y,w,h,fill=UI_COLORS.plate,light=UI_COLORS.bevelL,dark=UI_COLORS.bevelD){
   px(c,x-1,y-1,w+2,h+2,UI_COLORS.void);px(c,x,y,w,h,fill);
@@ -158,10 +161,11 @@ uiDetectTouch();
 if(typeof window!=='undefined'&&typeof window.addEventListener==='function'){window.addEventListener('resize',uiDetectTouch);window.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')uiTouch=true;},{passive:true});}
 
 // ---- HUD ----------------------------------------------------------------------------------
-function drawUI(c){
+function drawUI(c,viewInfo){
   uiRequestFonts();uiHits.length=0;
+  const vk=viewInfo&&viewInfo.k>0?viewInfo.k:1;if(vk!==K){K=vk;cnCache.clear();}
   const w=W,h=H,C=UI_COLORS,weapon=getWeapon(),melee=Boolean(weapon.melee),playing=state==='playing';
-  c.save();c.setTransform(1,0,0,1,0,0);c.globalAlpha=1;c.imageSmoothingEnabled=false;
+  c.save();c.setTransform(1,0,0,1,viewInfo?viewInfo.ox:0,viewInfo?viewInfo.oy:0);c.globalAlpha=1;c.imageSmoothingEnabled=false;
 
   // Vitals (top-left)
   const hp=Math.ceil(player.hp);

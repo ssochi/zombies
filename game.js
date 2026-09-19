@@ -1,9 +1,14 @@
 'use strict';
 
 // All artwork is drawn at a native 330 px tall frame; the logical width follows the viewport aspect (640..1280) so fullscreen never letterboxes.
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha: false });
+const canvas = document.getElementById('game');           // on-screen canvas at device resolution
+const screenCtx = canvas.getContext('2d', { alpha: false });
+const worldCanvas = document.createElement('canvas');      // logical 640..1280 x 330 frame, all world art
+const ctx = worldCanvas.getContext('2d', { alpha: false });
 ctx.imageSmoothingEnabled = false;
+// present() blits the world frame with nearest-neighbour scaling (view.k) into the screen canvas, then ui.js
+// draws the interface on top at native resolution so text stays sharp on any monitor.
+const view = { k: 1, ox: 0, oy: 0, dpr: 1, sw: 640, sh: 330 };
 let W = 640;
 const H = 330, PLAYER_SCALE = 1, WORLD_LENGTH = 6400;
 // Smaller actors: ~20% of frame height so 10-14 zombies fit on screen (They Are Coming framing).
@@ -24,12 +29,17 @@ function resizeGame(){
   const box=measureViewport();
   let width=640;
   if(box){width=Math.round(H*box.w/box.h);width=Math.max(640,Math.min(1280,width));width-=width%2;}
-  if(width!==W||canvas.width!==W){
-    W=width;canvas.width=W;if(canvas.height!==H)canvas.height=H;
+  if(width!==W||worldCanvas.width!==W||worldCanvas.height!==H){
+    W=width;worldCanvas.width=W;worldCanvas.height=H;
     // Resizing the bitmap resets context state, so restore crisp pixel scaling.
     ctx.imageSmoothingEnabled=false;
     if(typeof setWorldWidth==='function')setWorldWidth(W);
   }
+  let dpr=1;try{if(typeof window!=='undefined'&&Number.isFinite(window.devicePixelRatio))dpr=Math.min(3,Math.max(1,window.devicePixelRatio));}catch{}
+  const sw=box?Math.max(1,Math.round(box.w*dpr)):W,sh=box?Math.max(1,Math.round(box.h*dpr)):H;
+  if(canvas.width!==sw||canvas.height!==sh){canvas.width=sw;canvas.height=sh;}
+  const k=Math.min(sw/W,sh/H);
+  Object.assign(view,{k,dpr,sw,sh,ox:Math.round((sw-W*k)/2),oy:Math.round((sh-H*k)/2)});
   viewX=clamp(viewX,0,WORLD_LENGTH-W);
 }
 let seed = 42;
@@ -454,13 +464,18 @@ function draw(){
   }
   ctx.restore();
   // Screen-space UI (HUD, menus, touch controls) is drawn last by ui.js, outside the camera-shake transform.
-  if(typeof drawUI==='function')drawUI(ctx);
 }
 let resizePoll=0;
 // Poll the viewport box twice a second as well: mobile browser chrome and CSS changes resize it without a resize event on the window.
-function frame(time){const dt=Math.min((time-lastTime)/1000||0,.035);lastTime=time;resizePoll+=dt;if(resizePoll>.5){resizePoll=0;resizeGame();}update(dt);draw();requestAnimationFrame(frame);}
+function present(){
+  const s=screenCtx;s.setTransform(1,0,0,1,0,0);s.imageSmoothingEnabled=false;
+  s.fillStyle='#0b0c09';s.fillRect(0,0,canvas.width,canvas.height);
+  s.drawImage(worldCanvas,0,0,W,H,view.ox,view.oy,Math.round(W*view.k),Math.round(H*view.k));
+  if(typeof drawUI==='function')drawUI(s,view);
+}
+function frame(time){const dt=Math.min((time-lastTime)/1000||0,.035);lastTime=time;resizePoll+=dt;if(resizePoll>.5){resizePoll=0;resizeGame();}update(dt);draw();present();requestAnimationFrame(frame);}
 requestAnimationFrame(frame);
-function pointerPosition(e){const r=canvas.getBoundingClientRect();let scaleX=r.width/W,scaleY=r.height/H,offsetX=0,offsetY=0;const fit=getComputedStyle(canvas).objectFit;if(fit==='cover'||fit==='contain'){const scale=fit==='cover'?Math.max(scaleX,scaleY):Math.min(scaleX,scaleY);const pos=getComputedStyle(canvas).objectPosition.split(' ');offsetX=(r.width-W*scale)*(parseFloat(pos[0])/100);offsetY=(r.height-H*scale)*(parseFloat(pos[1]||'50')/100);scaleX=scaleY=scale;}pointer.screenX=(e.clientX-r.left-offsetX)/scaleX;pointer.screenY=(e.clientY-r.top-offsetY)/scaleY;pointer.x=pointer.screenX+viewX;pointer.y=pointer.screenY;}
+function pointerPosition(e){const r=canvas.getBoundingClientRect();const sx=canvas.width/(r.width||1),sy=canvas.height/(r.height||1);pointer.screenX=((e.clientX-r.left)*sx-view.ox)/view.k;pointer.screenY=((e.clientY-r.top)*sy-view.oy)/view.k;pointer.x=pointer.screenX+viewX;pointer.y=pointer.screenY;}
 // Pointer events go through ui.js first (uiPointer returns true when a button/d-pad/menu consumed them); the rest is aiming and firing.
 const uiConsumes=(type,e)=>typeof uiPointer==='function'&&uiPointer(type,pointer.screenX,pointer.screenY,e.pointerId)===true;
 canvas.addEventListener('pointermove',e=>{pointerPosition(e);uiConsumes('move',e);});
