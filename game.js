@@ -71,16 +71,18 @@ const claimedSupplyStops=new Set();
 // The road is one area; interiors (world.js INTERIORS) are others. Portals join them: a door on the road
 // leads into a store, the store's exit leads back to the door. Every area keeps its own actors, corpses,
 // blood and loot, so a cleared room stays cleared and the horde outside waits where you left it.
-const ROAD_PORTALS=[{x:1903,w:44,target:'store',targetX:110,label:'进入商店'}];
+// Door positions come from world.js (WORLD_PORTALS) so they follow the landmark art; this is the fallback.
+const ROAD_PORTALS_FALLBACK=[{x:1903,w:44,target:'store',targetX:110,label:'进入商店'}];
+function roadPortals(){return typeof WORLD_PORTALS!=='undefined'&&Array.isArray(WORLD_PORTALS)&&WORLD_PORTALS.length?WORLD_PORTALS:ROAD_PORTALS_FALLBACK;}
 let area='road',areaTransition=null;
 const areaStates={};
 function interiorDef(id){return typeof INTERIORS!=='undefined'&&INTERIORS&&INTERIORS[id]||null;}
 function areaLength(){if(area==='road')return WORLD_LENGTH;const def=interiorDef(area);return def?def.length:640;}
 function areaPortals(){
-  if(area==='road')return ROAD_PORTALS;
+  if(area==='road')return roadPortals();
   const def=interiorDef(area),back=areaStates[area]&&areaStates[area].returnX;
   const exits=def&&def.exits&&def.exits.length?def.exits:[{x:60,w:44,label:'离开'}];
-  return exits.map(e=>({x:e.x,w:e.w,label:e.label,target:'road',targetX:Number.isFinite(back)?back:ROAD_PORTALS[0].x}));
+  return exits.map(e=>({x:e.x,w:e.w,label:e.label,target:'road',targetX:Number.isFinite(back)?back:roadPortals()[0].x}));
 }
 function nearPortal(){if(state!=='playing'||areaTransition)return null;for(const p of areaPortals())if(Math.abs(player.x-p.x)<=p.w/2+12)return p;return null;}
 function currentSector(){if(area==='road')return getWorldSector(player.x);const def=interiorDef(area);return def?{name:def.name,code:def.code}:{name:'室内',code:'--'};}
