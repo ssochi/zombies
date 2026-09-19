@@ -11,7 +11,7 @@ function game() {
   const element=()=>({style:{},classList:{add:noop,remove:noop,toggle:noop},addEventListener:noop,setAttribute:noop,focus:noop,getContext:()=>context,querySelector:()=>({textContent:''}),nextElementSibling:{textContent:''}});
   const sandbox={console,Math,performance,document:{getElementById:id=>{if(!elements.has(id))elements.set(id,element());return elements.get(id);},createElement:element,querySelectorAll:()=>[],addEventListener:noop},window:{addEventListener:noop},requestAnimationFrame:noop,localStorage:{getItem:()=>0,setItem:noop}};
   const ctx=vm.createContext(sandbox);
-  for(const file of ['arsenal.js','characters.js','effects.js','specials.js','world.js','ui.js','game.js'])vm.runInContext(readFileSync(new URL('../'+file,import.meta.url),'utf8'),ctx,{filename:file});
+  for(const file of ['arsenal.js','characters.js','effects.js','specials.js','world.js','interiors.js','ui.js','game.js'])vm.runInContext(readFileSync(new URL('../'+file,import.meta.url),'utf8'),ctx,{filename:file});
   const run=code=>vm.runInContext(code,ctx);
   run('soundEnabled=false;startGame();zombies=[];spawnLeft=99;spawnTimer=999;');
   return run;

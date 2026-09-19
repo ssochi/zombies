@@ -5,7 +5,7 @@
   "description": "A hand-drawn pixel survival shooter",
   "scripts": {
     "start": "python3 scripts/serve.py 5173",
-    "check": "node --check game.js && node --check characters.js && node --check effects.js && node --check arsenal.js && node --check specials.js && node --check world.js",
+    "check": "node --check game.js && node --check characters.js && node --check effects.js && node --check arsenal.js && node --check specials.js && node --check world.js && node --check interiors.js",
     "test": "node --test scripts/check-game.mjs"
   }
 }
