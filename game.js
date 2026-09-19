@@ -532,7 +532,7 @@ canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')e.preventDe
 window.addEventListener('pointerup',e=>{if(uiConsumes('up',e))return;if(e.target===canvas){pointer.down=false;touchFiring=false;triggerLatched=false;}});
 window.addEventListener('pointercancel',e=>{if(uiConsumes('cancel',e))return;pointer.down=false;touchFiring=false;triggerLatched=false;keys.clear();});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))e.preventDefault();if(e.repeat&&['escape',' ','r','enter'].includes(key))return;if(key==='escape'||key===' '){pauseGame();return;}if(key==='enter'&&(state==='ready'||state==='over'||state==='won')){startGame();return;}if(state!=='playing')return;keys.add(key);if(key==='r')reload();if(key==='e')usePortal();if(['1','2','3','4','5'].includes(key))switchWeapon(WEAPON_ORDER[Number(key)-1]);if(key==='q'&&!e.repeat)switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(selectedWeapon)+1)%WEAPON_ORDER.length]);});
+window.addEventListener('keydown',e=>{const key=e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright'].includes(key))e.preventDefault();if(e.repeat&&['escape',' ','r','enter'].includes(key))return;if(key==='escape'||key===' '){pauseGame();return;}if(key==='enter'&&(state==='ready'||state==='over'||state==='won')){startGame();return;}if(state!=='playing')return;keys.add(key);if(key==='r')reload();if(key==='e')usePortal();if(key==='k')debugKillAll();if(['1','2','3','4','5'].includes(key))switchWeapon(WEAPON_ORDER[Number(key)-1]);if(key==='q'&&!e.repeat)switchWeapon(WEAPON_ORDER[(WEAPON_ORDER.indexOf(selectedWeapon)+1)%WEAPON_ORDER.length]);});
 window.addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>{keys.clear();pointer.down=false;triggerLatched=false;if(state==='playing')pauseGame();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='playing')pauseGame();});
@@ -540,6 +540,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='p
 function toggleSound(){soundEnabled=!soundEnabled;if(soundEnabled){initAudio();sound('pickup');}}
 async function toggleFullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{announce('当前浏览器暂不支持全屏',2);}}
 function touchFireStart(){touchFiring=true;pointer.down=true;const target=[...zombies].sort((a,b)=>distance(a,player)-distance(b,player))[0];if(target){pointer.x=target.pose.shoulder.x;pointer.y=(target.pose.shoulder.y+target.pose.hip.y)/2;player.face=pointer.x>=player.x?1:-1;player.pose=makePlayerPose().pose;}shoot();}
+// Debug: wipe every zombie in the current area (button in ui.js, K key).
+function debugKillAll(){if(state!=='playing')return 0;let n=0;for(const z of [...zombies]){if(!z.dead){killZombie(z,'body',z.face>0?Math.PI:0,'crowbar');n++;}}if(n)announce(`DEBUG · 清除 ${n} 只僵尸`,1.5);return n;}
 function touchFireEnd(){pointer.down=false;touchFiring=false;triggerLatched=false;}
 
 updateHUD();

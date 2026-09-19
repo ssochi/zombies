@@ -198,6 +198,8 @@ function drawUI(c,viewInfo){
   ];
   let bx=sysX;
   for(let i=buttons.length-1;i>=0;i--){bx-=13;const b=buttons[i];plate(c,bx,6,12,12,C.plate);icon(c,b.name,bx+2,6+2,C.text);uiHit(bx-1,5,14,14,{down:b.act});bx-=3;}
+  // Debug: one-click wipe of every zombie in the area.
+  bx-=30;plate(c,bx,6,30,12,'#2a1512','#c2402a','#5a1610');pixelText(c,'KILL',bx+3,8,1,'#e8735a',null);uiHit(bx-1,5,32,14,{down:()=>typeof debugKillAll==='function'&&debugKillAll()});bx-=3;
   const killColor=HUD.killPulse>0?C.brass:C.text;
   const timeText=formatTime(elapsed);
   pixelText(c,timeText,bx-4,6,2,C.text,C.void,'right');
