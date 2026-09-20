@@ -1,0 +1,55 @@
+name: House acceptance
+
+on:
+  push:
+    branches: [feat/apartment-visual-overhaul]
+    paths:
+      - 'house*'
+      - 'game.js'
+      - 'characters.js'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/house-acceptance.yml'
+  pull_request:
+    paths:
+      - 'house*'
+      - 'game.js'
+      - 'characters.js'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/house-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: house-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Archive the exact revision used for acceptance
+        run: git archive --format=zip --output="${RUNNER_TEMP}/house-source.zip" HEAD
+      - name: JavaScript syntax and gameplay regressions
+        run: |
+          npm run check
+          npm test
+          node --test tests/house-render.test.cjs
+      - name: Keep the reproducible acceptance source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: house-acceptance-source
+          path: ${{ runner.temp }}/house-source.zip
+          retention-days: 3
+          if-no-files-found: error
