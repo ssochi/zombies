@@ -17,7 +17,7 @@ function configureSpecial(z, kind = 'normal') {
   z.kind = kind;
   z.specialState = 'idle'; z.specialTimer = 0; z.specialDuration = 0; z.specialProgress = 0;
   z.specialCooldown = .95 + (z.phase || 0) * .12;
-  z.headDamageMultiplier = 3; z.bodyDamageMultiplier = 1; z.limbThreshold = 1;
+  z.headDamageMultiplier = 5; z.bodyDamageMultiplier = 1; z.limbThreshold = 1;
   if (kind === 'runner') {
     z.speed *= 1.28; z.scale *= .94; z.hp = Math.max(5.3, z.hp * 1.03);
     z.specialName = '疾行者';

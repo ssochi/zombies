@@ -105,14 +105,63 @@ function makeZombiePose(z) {
   }
   return toWorld(pose, z, z.scale);
 }
+// Authored local-space key poses keep the fist on the grip throughout the arc.
+// Each row: time, shaft angle, fist X/Y, torso lean, crouch, planted-step weight.
+const MELEE_POSES={
+  slash:[[0,-1.05,19,-69,0,0,0],[.28,-2.08,3,-99,-4,-1,-.3],[.46,-.12,33,-85,8,2,1],[.64,.96,23,-62,10,4,.8],[1,-1.05,19,-69,0,0,0]],
+  overhead:[[0,-1.05,19,-69,0,0,0],[.40,-2.32,1,-112,-6,-3,-.4],[.56,.02,34,-83,11,5,1],[.72,1.30,26,-61,12,7,1],[1,-1.05,19,-69,0,0,0]]
+};
+function sampleMeleePose(swing){
+  const move=meleeMove(swing&&swing.moveId),phase=swing?clamp(swing.elapsed/(swing.duration||move.duration),0,1):0,frames=MELEE_POSES[move.id];
+  let a=frames[0],b=frames[1];for(let i=1;i<frames.length;i++){b=frames[i];if(phase<=b[0]){a=frames[i-1];break;}}
+  const t=smoothStep((phase-a[0])/(b[0]-a[0]));
+  return {move,phase,angle:mix(a[1],b[1],t),handX:mix(a[2],b[2],t),handY:mix(a[3],b[3],t),lean:mix(a[4],b[4],t),crouch:mix(a[5],b[5],t),step:mix(a[6],b[6],t)};
+}
+function makePlayerMeleePose(p,weapon,movement){
+  const swing=meleeSwing,m=sampleMeleePose(swing),bob=Math.sin(p.walk*2)*.55*movement;
+  const hip={x:-2+m.lean*.23,y:-60+m.crouch+bob},shoulder={x:4+m.lean-p.kick*.3,y:-94+m.crouch+bob};
+  const left=footCycle(p.walk,18,p.sprinting?10:7),right=footCycle(p.walk+Math.PI,18,p.sprinting?10:7);
+  const pose={hip,shoulder,head:{x:shoulder.x+4+m.lean*.15,y:shoulder.y-12},
+    footL:{x:mix(-17,left.x-3,movement)-m.step*4,y:left.y*movement},footR:{x:mix(16,right.x+3,movement)+m.step*9,y:right.y*movement}};
+  // Lower the pelvis slightly when a planted stride needs it; do not stretch the shins.
+  for(const foot of [pose.footL,pose.footR])hip.y=Math.max(hip.y,foot.y-Math.sqrt(Math.max(1,63.5**2-(foot.x-hip.x)**2)));
+  const localAim=swing?(p.face===1?swing.angle:Math.PI-swing.angle):Math.atan2(pointer.y-(p.y-94*PLAYER_SCALE),(pointer.x-p.x)*p.face);
+  const aimOffset=clamp(Math.atan2(Math.sin(localAim),Math.cos(localAim)),-.62,.62);
+  // Contact gives the grip a small elastic recoil, while the world continues moving.
+  const recoil=(swing&&swing.impactHold>0)?Math.sin((1-swing.impactHold/m.move.hitPause)*Math.PI)*2:0;
+  const hand={x:m.handX-recoil,y:m.handY+bob+m.crouch*.15};
+  const ca=Math.cos(aimOffset*.55),sa=Math.sin(aimOffset*.55),dx=hand.x-shoulder.x,dy=hand.y-shoulder.y;
+  pose.handR={x:shoulder.x+dx*ca-dy*sa,y:shoulder.y+dx*sa+dy*ca};
+  const angle=m.angle+aimOffset,localPoint=(x,y)=>({x:pose.handR.x+Math.cos(angle)*x-Math.sin(angle)*y,y:pose.handR.y+Math.sin(angle)*x+Math.cos(angle)*y});
+  const support=localPoint(9,0),guard={x:shoulder.x+6,y:shoulder.y+24};
+  const supportWeight=swing&&m.move.twoHand?Math.min(1,m.phase/.16,(1-m.phase)/.14):0;
+  pose.handL=pointMix(guard,support,clamp(supportWeight,0,1));
+  pose.kneeL=solveJoint(hip,pose.footL,32,32,-1);pose.kneeR=solveJoint(hip,pose.footR,32,32,-1);
+  pose.elbowL=solveJoint(shoulder,pose.handL,22,23,1);
+  pose.elbowR=solveJoint({x:shoulder.x-4,y:shoulder.y+3},pose.handR,21,23,1);
+  const world=toWorld(pose,p,PLAYER_SCALE),origin=world.handR;
+  return {pose:world,gun:{origin,angle,face:p.face,progress:0,pump:0,localPoint,twoHand:supportWeight>.5,meleePhase:m.phase,moveId:m.move.id},weapon};
+}
+function makePlayerLadderPose(p,weapon){
+  const cycle=Math.sin(p.walk),pose={hip:{x:-3,y:-60},shoulder:{x:4,y:-94},head:{x:9,y:-106},
+    handL:{x:21,y:-115+cycle*10},handR:{x:21,y:-115-cycle*10},
+    footL:{x:9,y:-7-cycle*7},footR:{x:9,y:-7+cycle*7}};
+  for(const side of ['L','R']){
+    pose['knee'+side]=solveJoint(pose.hip,pose['foot'+side],32,32,1);
+    pose['elbow'+side]=solveJoint(pose.shoulder,pose['hand'+side],22,23,-1);
+  }
+  return {pose:toWorld(pose,p,PLAYER_SCALE),gun:{origin:toWorld({point:{x:-16,y:-65}},p,PLAYER_SCALE).point,angle:-1.7,face:p.face,progress:0,pump:0,stowed:true},weapon};
+}
 function makePlayerPose() {
   const p = player, weapon=playerWeaponArt(), movement = clamp(Math.hypot(p.vx, p.vy) / 55, 0, 1);
+  if(p.traversal?.kind==='ladder')return makePlayerLadderPose(p,weapon);
+  if(weapon.melee)return makePlayerMeleePose(p,weapon,movement);
   const movingLean = p.vx * p.face / 55 * 2, bob = Math.sin(p.walk * 2) * .65 * movement + Math.sin(worldTime * 2) * .25 * (1 - movement);
   const hip = { x: -2 - p.kick*.12, y: -60 + bob + p.kick*.08 };
   const shoulder = { x: 4 + movingLean - p.kick * .66, y: -94 + bob + p.kick*.13 };
   const left = footCycle(p.walk, 18, p.sprinting ? 10 : 7), right = footCycle(p.walk + Math.PI, 18, p.sprinting ? 10 : 7);
   const pose = {
-    hip, shoulder, head: { x: shoulder.x + 4 - p.kick*.22, y: shoulder.y - 19 + p.kick*.12 },
+    hip, shoulder, head: { x: shoulder.x + 4 - p.kick*.22, y: shoulder.y - 12 + p.kick*.12 },
     footL: { x: mix(-17, left.x - 3, movement), y: left.y * movement },
     footR: { x: mix(16, right.x + 3, movement), y: right.y * movement }
   };
@@ -125,7 +174,7 @@ function makePlayerPose() {
   const progress = reloadTime > 0 ? 1 - reloadTime / (typeof getReloadDuration==='function'?getReloadDuration():weapon.reloadDuration) : 0;
   const tilt = reloadTime > 0 ? Math.sin(progress * Math.PI) * .5 : 0;
   const sway=Math.sin(p.walk)*movement*.005+Math.sin(worldTime*1.7)*.0012;
-  let angle = aim - (p.climb||0) - p.kick*.009 + tilt + sway;
+  let angle = (p.traversal?.kind==='stairs'||p.traversal?.kind==='ladder')?.68:aim - (p.climb||0) - p.kick*.009 + tilt + sway;
   const swing=weapon.melee&&meleeSwing,phase=swing?clamp(swing.elapsed/weapon.swingDuration,0,1):0;
   if(weapon.melee){
     const lockedAim=swing?(p.face===1?swing.angle:Math.PI-swing.angle):aim,backswing=-weapon.arc-.4,followThrough=weapon.arc-.4;
@@ -293,18 +342,19 @@ function drawZombie(c, z, pose = z.pose) {
 }
 
 function drawPlayerPalm(c,hand,near=true) {
-  const s=PLAYER_SCALE;
-  rect(c,hand.x-2*s,hand.y-2*s,4*s,4*s,near?'#d5ad79':'#b88e59');
-  rect(c,hand.x-s,hand.y-s,2*s,s,near?'#e6bd86':'#cba46d');
+  const s=PLAYER_SCALE,a=wardrobe.palette();
+  rect(c,hand.x-2*s,hand.y-2*s,4*s,4*s,near?a.skin:a.skinDark);
+  rect(c,hand.x-s,hand.y-s,2*s,s,a.skinLight);
 }
 function drawPlayerArm(c,pose,side,withPalm=false) {
-  const p=player,s=PLAYER_SCALE,near=side==='R';
+  const p=player,s=PLAYER_SCALE,near=side==='R',look=wardrobe.get(),a=wardrobe.palette();
   const shoulder=near?{x:pose.shoulder.x-p.face*4*s,y:pose.shoulder.y+3*s}:pose.shoulder;
-  const elbow=pose['elbow'+side],hand=pose['hand'+side];
-  taperedBone(c,shoulder,elbow,7.8*s,6.7*s,near?'#d4a775':'#bb945f',near?'#e0b681':null);
-  bone(c,shoulder,pointMix(shoulder,elbow,.43),9*s,near?'#969780':'#68705e');
-  bonePatch(c,shoulder,elbow,.36,1.2*s,8*s,near?'#b1ae90':'#80856c');
-  taperedBone(c,elbow,hand,6.6*s,4.6*s,near?'#d7ae7c':'#c29b68',near?'#e5bd87':null);
+  const elbow=pose['elbow'+side],hand=pose['hand'+side],long=look.top==='jacket';
+  taperedBone(c,shoulder,elbow,(long?9:7.8)*s,6.7*s,near?a.skin:a.skinDark,near?a.skinLight:null);
+  bone(c,shoulder,pointMix(shoulder,elbow,long?1:.43),9*s,near?a.top:a.topDark);
+  bonePatch(c,shoulder,elbow,.36,1.2*s,8*s,near?a.topLight:a.top);
+  taperedBone(c,elbow,hand,6.6*s,4.6*s,long?(near?a.top:a.topDark):(near?a.skin:a.skinDark),near?(long?a.topLight:a.skinLight):null);
+  if(long)bonePatch(c,elbow,hand,.86,2.2*s,6*s,a.topDark);
   if(near)bonePatch(c,elbow,hand,.79,2.5*s,5.7*s,'#333a2d');
   if(withPalm)drawPlayerPalm(c,hand,near);
 }
@@ -313,10 +363,14 @@ function drawWeapon(c,gun,weapon=playerWeaponArt()) {
   const stock=weapon.stockLength??12,progress=gun.progress;
   c.save();c.translate(gun.origin.x,gun.origin.y);c.scale(p.face*s,s);c.rotate(gun.angle);
   if(id==='crowbar') {
-    // Red oxide shaft, scraped steel hook and a wrapped lower grip.
-    limb(c,-5,0,barrel-9,0,3,'#77392c');limb(c,1,-1,barrel-10,-1,1,'#c07756');
-    poly(c,[[barrel-10,-2],[barrel-4,-7],[barrel+1,-7],[barrel+5,-3],[barrel+3,3],[barrel,4],[barrel+1,-2],[barrel-2,-4],[barrel-6,-3],[barrel-8,1]],'#a8ada0');
-    rect(c,-6,-2,13,4,'#30382f');for(let i=0;i<4;i++)rect(c,-5+i*3,-2,1,4,'#636b59');
+    // Forged hexagonal stock, flattened heel and a substantial claw with an open notch.
+    poly(c,[[-11,-2],[-7,-3],[barrel-9,-3],[barrel-3,-9],[barrel+4,-10],[barrel+9,-6],[barrel+10,0],[barrel+7,5],[barrel+3,6],[barrel+5,0],[barrel+4,-4],[barrel,-5],[barrel-5,1],[-7,3],[-11,2]],'#272e2b');
+    poly(c,[[-9,-1],[-5,-2],[barrel-9,-2],[barrel-3,-8],[barrel+4,-9],[barrel+8,-5],[barrel+9,0],[barrel+6,4],[barrel+4,4],[barrel+6,-1],[barrel+4,-5],[barrel,-6],[barrel-6,1],[-7,2]],'#9b4933');
+    limb(c,10,-1,barrel-10,-1,1,'#cc8560');limb(c,11,2,barrel-8,2,1,'#622f27');
+    poly(c,[[barrel-9,-3],[barrel-3,-9],[barrel+4,-9],[barrel+8,-5],[barrel+9,0],[barrel+6,4],[barrel+4,4],[barrel+6,-1],[barrel+4,-5],[barrel,-6],[barrel-6,0]],'#9da79c');
+    limb(c,barrel-5,-5,barrel-1,-8,1,'#dee0c7');rect(c,barrel+2,-8,3,1,'#d0d5bc');rect(c,barrel+7,-4,1,4,'#5b7068');
+    rect(c,-8,-2,20,5,'#353d38');for(let i=0;i<6;i++)limb(c,-7+i*3,-2,-5+i*3,2,1,i%2?'#727a65':'#505c4f');
+    rect(c,-11,-1,3,3,'#a1a894');rect(c,-11,-1,3,1,'#d3d5be');rect(c,19,0,3,1,'#d0b78b');rect(c,27,-2,5,1,'#73684d');
     c.restore();return;
   } else if(id==='pistol') {
     const slide=Math.min(4,p.kick*.6);rect(c,-2-slide,-5,22,6,'#656f65');rect(c,-1-slide,-5,19,2,'#a3a58d');rect(c,17-slide,-4,5,3,'#303930');
@@ -355,49 +409,93 @@ function drawWeapon(c,gun,weapon=playerWeaponArt()) {
   }
   rect(c,10-p.kick*.5,-2,5,2,'#b0a78d');
   if(muzzle>0){
-    const f=shotSerial%3,life=weapon.muzzleLife||.047,intensity=clamp(muzzle/life,0,1),length=(id==='shotgun'?34:id==='pistol'?18:id==='smg'?15:24)+f*5;
-    const l=length*(.55+intensity*.45),width=id==='shotgun'?10:6;
-    poly(c,[[barrel,-1],[barrel+6,-width-f],[barrel+7,-3],[barrel+l,-2],[barrel+9,2],[barrel+6,width+f],[barrel+4,2]],'#e89030');
-    poly(c,[[barrel,-1],[barrel+6,-4],[barrel+4,-1],[barrel+l*.7,0],[barrel+5,2],[barrel+3,4]],'#ffda73');rect(c,barrel,-1,6,2,'#fff3b9');
+    const age=1-clamp(muzzle/(weapon.muzzleLife||.05),0,1),f=shotSerial%3;
+    const peak=age<.22?1:Math.pow(1-age,1.6),size=id==='shotgun'?1.35:id==='pistol'?.68:id==='smg'?.78:1;
+    const length=(18+f*4)*size*(.5+peak*.5),width=(3+f)*size;
+    c.globalAlpha=.65+.35*peak;
+    poly(c,[[barrel,0],[barrel+4,-width],[barrel+length*.55,-width*.4],[barrel+length,-1],[barrel+length*.65,1],[barrel+5,width],[barrel+2,1]],'#e88737');
+    poly(c,[[barrel,-1],[barrel+5,-width*.52],[barrel+length*.8,0],[barrel+5,width*.5],[barrel,1]],'#ffd783');
+    rect(c,barrel,-1,Math.max(3,length*.28),2,'#fff5d5');
+    if(age<.4){rect(c,barrel+4,-width-2,2,2,'#eeb35c');rect(c,barrel+7,width+1,3,1,'#eeb35c');}
   }
   c.restore();
 }
 
 function drawPlayer(c) {
-  const p=player,s=PLAYER_SCALE, art=makePlayerPose(), pose=art.pose, gun=art.gun;
+  const p=player,s=PLAYER_SCALE,art=makePlayerPose(),pose=art.pose,gun=art.gun,look=wardrobe.get(),a=wardrobe.palette();
   c.save();if(p.inv>0&&Math.floor(p.inv*18)%2)c.globalAlpha=.68;
   for(const side of ['L','R']){
-    const k=pose['knee'+side],f=pose['foot'+side];
-    taperedBone(c,pose.hip,k,10*s,8*s,side==='L'?'#ad895d':'#cfac79',side==='L'?null:'#dfbe8b');taperedBone(c,k,f,8*s,6.6*s,side==='L'?'#b58f60':'#caa272',side==='L'?null:'#d5b180');
-    bonePatch(c,pose.hip,k,.26,8*s,4*s,'#b38f60');bonePatch(c,pose.hip,k,.26,s,4*s,'#ddbb84');
-    bonePatch(c,k,f,.05,5*s,7.8*s,'#b29262');bonePatch(c,k,f,.12,s,5*s,'#d1af7a');bonePatch(c,k,f,.75,2*s,6*s,'#ab885e');drawBoot(c,f,s,p.face,'#4c2a22');
+    const k=pose['knee'+side],f=pose['foot'+side],near=side==='R';
+    taperedBone(c,pose.hip,k,10*s,8*s,near?a.pants:a.pantsDark,near?a.pantsLight:null);
+    taperedBone(c,k,f,8*s,6.6*s,near?a.pants:a.pantsDark,near?a.pantsLight:null);
+    if(look.pants==='cargo'){
+      bonePatch(c,pose.hip,k,.26,8*s,5*s,a.pantsDark);bonePatch(c,pose.hip,k,.26,s,5*s,a.pantsLight);
+      bonePatch(c,k,f,.05,5*s,7.8*s,a.pantsDark);bonePatch(c,k,f,.12,s,5*s,a.pantsLight);
+    }else{
+      bonePatch(c,pose.hip,k,.08,7*s,1*s,a.pantsLight,3*s);bonePatch(c,k,f,.08,20*s,s,a.pantsLight,2*s);
+      bonePatch(c,k,f,.87,3*s,7*s,a.pantsDark);
+    }
+    if(look.boots==='boots'){
+      bone(c,pointMix(k,f,.83),f,7*s,a.boots);bonePatch(c,k,f,.86,4*s,2*s,a.bootsLight);drawBoot(c,f,s,p.face,a.boots);
+    }else{
+      c.save();c.translate(f.x,f.y);c.scale(p.face*s,s);
+      poly(c,[[-4,-3],[3,-3],[5,-1],[9,0],[9,3],[-4,3]],a.boots);rect(c,-4,1,13,2,'#c5c1a6');rect(c,0,-2,4,1,a.bootsLight);rect(c,6,-1,3,2,'#ddd3b5');c.restore();
+    }
   }
+  if(gun.stowed)drawWeapon(c,gun,art.weapon);
+  // The far arm must stay behind torso, vest and equipment throughout reload.
   drawPlayerArm(c,pose,'L',true);
   const bodyAngle=Math.atan2(pose.hip.y-pose.shoulder.y,pose.hip.x-pose.shoulder.x)-Math.PI/2;
   c.save();c.translate(pose.shoulder.x,pose.shoulder.y);c.rotate(bodyAngle);c.scale(p.face*s,s);
-  poly(c,[[-13,1],[-8,0],[-10,34],[-21,31],[-20,10]],'#292e26');rect(c,-20,11,5,15,'#373c2f');rect(c,-16,2,3,25,'#4e5140');
-  rect(c,-19,9,6,2,'#62614b');rect(c,-20,26,7,2,'#53543f');rect(c,-18,13,1,10,'#73715a');rect(c,-19,29,5,4,'#22281f');rect(c,-18,-1,8,4,'#605e45');rect(c,-21,13,2,13,'#1f261f');
-  poly(c,[[-9,-2],[8,0],[11,30],[-11,35]],'#7c7d6d');poly(c,[[-5,1],[1,3],[0,25],[-8,30]],'#a09f8a');
-  rect(c,-10,30,22,5,'#383b2e');rect(c,-8,35,17,4,'#b5a782');rect(c,-10,37,6,16,'#33372d');rect(c,-10,52,9,3,'#33372d');
-  rect(c,-9,0,3,22,'#42473b');rect(c,-4,12,7,8,'#5c6251');rect(c,-6,8,4,3,'#ada78b');
-  rect(c,-3,13,5,1,'#8f9079');rect(c,-1,16,2,2,'#2d392e');rect(c,3,22,5,7,'#555e4b');rect(c,3,23,5,1,'#899078');rect(c,-7,30,2,5,'#a59d7e');rect(c,2,31,5,3,'#9e987a');
-  c.restore();
-  bone(c,pose.shoulder,pose.head,6*s,'#bb925f');
+  if(look.gear==='pack'){
+    poly(c,[[-13,1],[-8,0],[-10,34],[-21,31],[-20,10]],a.gearDark);rect(c,-20,11,5,15,a.gear);rect(c,-16,2,3,25,a.gearLight);
+    rect(c,-19,9,6,2,a.gearLight);rect(c,-20,26,7,2,a.gearLight);rect(c,-18,13,1,10,a.gearLight);rect(c,-19,29,5,4,a.gearDeep);rect(c,-18,-1,8,4,a.gear);rect(c,-21,13,2,13,a.gearDeep);
+  }
+  poly(c,[[-9,-2],[8,0],[11,30],[-11,35]],a.top);poly(c,[[-5,1],[1,3],[0,25],[-8,30]],a.topLight);
+  rect(c,-10,30,22,5,'#383b2e');rect(c,-8,35,17,4,a.pants);rect(c,-10,37,6,16,'#33372d');rect(c,-10,52,9,3,'#33372d');
+  if(look.top==='jacket'){
+    rect(c,1,3,1,27,a.topDeep);rect(c,2,6,1,3,'#b5ae87');poly(c,[[-8,-1],[-1,4],[-3,10],[-9,3]],a.topDark);poly(c,[[2,1],[8,0],[7,8],[2,5]],a.topLight);
+    rect(c,-7,14,6,7,a.topDark);rect(c,-7,14,6,1,a.topLight);rect(c,4,20,5,7,a.topDark);
+  }else if(look.top==='armor'){
+    poly(c,[[-9,1],[7,1],[10,25],[7,31],[-9,30],[-12,7]],a.topDark);rect(c,-7,7,14,16,a.topDeep);rect(c,-6,8,12,2,a.topLight);
+    for(let i=0;i<3;i++)rect(c,-7,15+i*4,14,1,a.top);rect(c,-8,26,16,3,a.topLight);rect(c,-8,0,4,7,a.topDeep);rect(c,4,0,4,7,a.topDeep);
+  }else{
+    rect(c,-4,12,7,8,a.topDark);rect(c,-6,8,4,3,a.topLight);rect(c,-3,13,5,1,a.topLight);rect(c,-1,16,2,2,'#2d392e');rect(c,3,22,5,7,a.topDark);rect(c,3,23,5,1,a.topLight);
+  }
+  if(look.gear==='pack')rect(c,-9,0,3,22,a.gearDark);
+  if(look.gear==='rig'){
+    rect(c,-8,0,3,28,a.gearDeep);rect(c,5,0,3,28,a.gearDeep);rect(c,-9,14,18,3,a.gearDark);
+    for(let i=0;i<3;i++){rect(c,-8+i*6,16,5,11,a.gear);rect(c,-8+i*6,16,5,2,a.gearLight);rect(c,-6+i*6,20,1,3,a.gearDeep);}
+  }
+  rect(c,-7,30,2,5,'#a59d7e');rect(c,2,31,5,3,'#9e987a');c.restore();
+  bone(c,pose.shoulder,pose.head,6*s,a.skinDark);
   c.save();c.translate(pose.head.x,pose.head.y);c.rotate(p.face*.07);c.scale(p.face*s,s);
-  rect(c,-6,-8,13,15,'#cba16e');rect(c,6,-4,4,5,'#cea571');rect(c,-5,-4,3,4,'#ac8052');
-  rect(c,-9,-13,18,6,'#30342b');rect(c,-9,-7,19,4,'#414439');rect(c,7,-5,12,3,'#292e26');
-  rect(c,-6,-12,12,2,'#4d4e3e');rect(c,-8,-9,3,2,'#242b24');rect(c,8,-5,9,1,'#5d5d49');
-  rect(c,2,-3,6,3,'#282e27');rect(c,-5,3,16,8,'#743c20');rect(c,-2,10,10,12,'#753b1c');rect(c,-1,11,3,8,'#894521');
-  rect(c,3,-3,3,1,'#737763');rect(c,-4,4,13,2,'#925231');rect(c,-1,8,10,1,'#5e311c');
-  poly(c,[[-3,10],[-8-p.vx*p.face*.025,13+Math.sin(p.walk)*1.4],[-6,18],[-1,14]],'#804322');
+  rect(c,-6,-8,13,15,a.skin);rect(c,6,-4,4,5,a.skin);rect(c,-5,-4,3,4,a.skinDark);
+  if(look.head==='cap'){
+    rect(c,-9,-13,18,6,a.headDark);rect(c,-9,-7,19,4,a.head);rect(c,7,-5,12,3,a.headDeep);
+    rect(c,-6,-12,12,2,a.headLight);rect(c,-8,-9,3,2,a.headDeep);rect(c,8,-5,9,1,a.headLight);
+  }else if(look.head==='beanie'){
+    poly(c,[[-8,-5],[-8,-12],[-5,-16],[4,-16],[8,-12],[9,-4]],a.head);rect(c,-9,-7,19,4,a.headDark);
+    for(let i=0;i<5;i++)rect(c,-6+i*3,-12,1,6,a.headLight);rect(c,3,-6,3,2,'#c3b99a');
+  }else if(look.head==='helmet'){
+    poly(c,[[-10,-5],[-10,-12],[-6,-17],[4,-17],[10,-12],[11,-4]],a.head);rect(c,-6,-15,12,2,a.headLight);rect(c,-11,-6,23,3,a.headDark);
+    rect(c,-8,-2,3,6,a.headDeep);rect(c,-8,3,6,2,a.headDark);rect(c,7,-12,4,4,a.headDeep);rect(c,8,-11,2,2,'#a6b2a0');
+  }else{
+    poly(c,[[-7,-3],[-8,-10],[-3,-13],[5,-11],[8,-6],[3,-8],[-3,-7],[-3,-2]],a.headDeep);rect(c,-5,-10,7,2,a.head);
+  }
+  rect(c,2,-3,6,3,'#282e27');rect(c,3,-3,3,1,'#737763');
+  if(look.face==='scarf'){
+    rect(c,-5,3,16,8,a.face);rect(c,-2,10,10,12,a.face);rect(c,-1,11,3,8,a.faceLight);rect(c,-4,4,13,2,a.faceLight);rect(c,-1,8,10,1,a.faceDark);
+    poly(c,[[-3,10],[-8-p.vx*p.face*.025,13+Math.sin(p.walk)*1.4],[-6,18],[-1,14]],a.face);
+  }else if(look.face==='mask'){
+    rect(c,-5,2,15,7,a.face);rect(c,-5,2,14,1,a.faceLight);rect(c,5,3,6,6,a.faceDark);rect(c,7,4,3,3,a.faceLight);rect(c,-6,3,3,2,a.faceDeep);
+  }else{rect(c,5,4,3,1,a.skinDark);rect(c,-3,5,6,2,a.skinDark);}
   c.restore();
-  // Near arm crosses the chest; its palm wraps over the weapon below.
-  drawPlayerArm(c,pose,'R',false);
-  drawWeapon(c,gun,art.weapon);
-  // The distant arm and palm were already painted behind the torso. During
-  // reload they must never be redrawn over the vest, belt or near forearm.
-  if(reloadTime<=0)drawPlayerPalm(c,pose.handL,false);
-  drawPlayerPalm(c,pose.handR,true);
+  drawPlayerArm(c,pose,'R',false);if(gun.stowed){drawPlayerPalm(c,pose.handR,true);c.restore();return;}drawWeapon(c,gun,art.weapon);
+  if(art.weapon.melee){
+    const grip=(hand,near)=>{c.save();c.translate(hand.x,hand.y);c.rotate(p.face===1?gun.angle:Math.PI-gun.angle);rect(c,-2*s,-3*s,5*s,6*s,near?a.skin:a.skinDark);rect(c,-s,-3*s,3*s,s,a.skinLight);rect(c,0,s,3*s,s,a.skinDark);c.restore();};
+    if(gun.twoHand)grip(pose.handL,false);grip(pose.handR,true);
+  }else{if(reloadTime<=0)drawPlayerPalm(c,pose.handL,false);drawPlayerPalm(c,pose.handR,true);}
   c.restore();
 }
 

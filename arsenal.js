@@ -47,7 +47,7 @@ const WEAPONS = Object.freeze({
   crowbar: Object.freeze({
     id:'crowbar', name:'撬棍', label:'撬棍 · 近战破坏', role:'扇形近战 / 击退断肢', key:'5',
     melee:true, magSize:0, reserve:0, fireInterval:.62, pellets:0, damage:2.6,
-    range:90, swingDuration:.46, staminaCost:16, arc:1.25, maxTargets:3,
+    range:90, swingDuration:.54, staminaCost:16, arc:1.25, maxTargets:3,
     spread:0, movingSpread:0, sprintSpread:0, heatSpread:0,
     muzzleLife:0, muzzleScale:0, reloadDuration:0,
     kickSnap:2.4, kickImpulse:105, kickSpring:15, maxKick:8, climbSnap:.025, climbImpulse:.5, climbSpring:8, maxClimb:.14,
@@ -59,3 +59,10 @@ const WEAPONS = Object.freeze({
 });
 const WEAPON_ORDER = Object.freeze(Object.keys(WEAPONS));
 function weaponById(id) { return WEAPONS[id] || WEAPONS.rifle; }
+
+// Shared timing and impact profiles: the game and fitting room sample the same moves.
+const MELEE_MOVES=Object.freeze([
+  Object.freeze({id:'slash',name:'斜劈',duration:.54,activeStart:.28,activeEnd:.60,hitPause:.055,damage:1,stamina:16,impulse:320,lift:65,twoHand:false}),
+  Object.freeze({id:'overhead',name:'双手重劈',duration:.72,activeStart:.40,activeEnd:.68,hitPause:.085,damage:1.45,stamina:24,impulse:390,lift:115,twoHand:true})
+]);
+function meleeMove(id){return MELEE_MOVES.find(move=>move.id===id)||MELEE_MOVES[0];}

@@ -16,7 +16,7 @@ function bloodPool(x,y,width=rand(22,34)){pushDecal({kind:'pool',x,y,size:width/
 function decalColor(d){return effectsClock-d.t>BLOOD_DARKEN_AFTER?BLOOD_OLD:d.color;}
 function drawDecals(c){
   for(const d of decals){
-    if(d.x<viewX-60||d.x>viewX+W+60)continue;
+    if(d.x<viewX-60||d.x>viewX+cameraWidth()+60)continue;
     const fresh=effectsClock-d.t<BLOOD_DARKEN_AFTER,color=fresh?d.color:BLOOD_OLD;
     if(d.kind==='pool'){
       const grow=clamp((effectsClock-d.t)/.4,.15,1),w=d.width*grow,h=d.height*grow;
@@ -51,9 +51,7 @@ function muzzleEffects(m){
     emit({kind:'spark',x:m.x,y:m.y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:rand(.06,.14),size:rand(1,2),color:i%2?'#ffd58a':'#fff0b0',drag:7});
   }
   for(let i=0;i<(pistol?2:4);i++)emit({kind:'smoke',x:m.x+Math.cos(m.angle)*i*2,y:m.y+Math.sin(m.angle)*i*2, vx:Math.cos(m.angle)*rand(14,28)+rand(-4,4),vy:Math.sin(m.angle)*10-rand(5,13),life:rand(.25,.6)+player.heat*.13,size:rand(1,3),color:'#c6ba99',drag:3});
-  // Filled pixel star plus a one-frame white core on the barrel: reads at any scale.
-  emit({kind:'blast',x:m.x,y:m.y,vx:Math.cos(m.angle)*20,vy:Math.sin(m.angle)*20,life:pistol?.05:shotgun?.09:.06,size:pistol?7:shotgun?18:weapon.id==='smg'?9:11,color:'#f4a63a',direction:m.angle});
-  emit({kind:'core',x:m.x,y:m.y,vx:0,vy:0,life:.017,size:20,color:'#ffffff',direction:m.angle});
+  // Flash geometry is emitted once by the weapon renderer; particles are only hot gas and sparks.
   const chamber=pistol?6:13,x=m.origin.x+Math.cos(m.angle)*chamber*PLAYER_SCALE,y=m.origin.y+Math.sin(m.angle)*chamber*PLAYER_SCALE;
   emit({kind:'shell',x,y,vx:-player.face*rand(28,52),vy:-rand(50,82),life:6,angle:m.angle,spin:player.face*rand(18,30),size:shotgun?3:2,color:weapon.shellColor,floor:player.y+rand(-2,3),gravity:260,drag:.2});
 }
@@ -62,12 +60,8 @@ function impactFragments(z,p,dir,part){
   emit({kind:'impactCore',x:p.x,y:p.y,vx:0,vy:0,life:.035,size:2,color:'#e0c99a'});
   emit({kind:'tracer',x:p.x,y:p.y,vx:0,vy:0,life:.055,size:1,color:'#e8cf8a',direction:dir});
 }
-function drawWeaponLight(c){
-  const weapon=getWeapon();if(muzzle<=0||weapon.melee||weapon.id==='crowbar')return;const m=playerMuzzle(),pistol=weapon.id==='pistol';c.save();
-  c.globalAlpha=(pistol?.24:.30)*(muzzle/weapon.muzzleLife);c.fillStyle='#ffd17a';
-  c.beginPath();c.ellipse(m.x,m.y,(pistol?23:38)*1.4,(pistol?14:23)*1.4,m.angle,0,TAU);c.fill();
-  c.globalAlpha=.14*(muzzle/getWeapon().muzzleLife);poly(c,[[m.x-4,m.y-8],[m.x+17*Math.cos(m.angle),m.y-4],[m.x+8,m.y+7],[m.x-9,m.y+4]],'#ffe6a0');c.restore();
-}
+// Lighting is composited centrally after scene grading; no flat ellipse on top of the gun.
+function drawWeaponLight(c){}
 function textParticle(x,y,text,color='#e3e7a5',size=9){emit({kind:'text',x,y,vx:0,vy:-28,life:1.1,text,color,size,drag:1.6});}
 function makeNode(p,vx,vy,r){return{x:p.x,y:p.y,px:p.x-vx/120,py:p.y-vy/120,r,bounced:false};}
 function makeRig(z,part,dir,launch=1){
@@ -182,7 +176,7 @@ function updateEffects(dt){
       }
     }
   }
-  particles=particles.filter(p=>p.life>0&&p.x>viewX-240&&p.x<viewX+W+240);
+  particles=particles.filter(p=>p.life>0&&p.x>viewX-240&&p.x<viewX+cameraWidth()+240);
 }
 function drawRig(c,r){
   const p=r.nodes;c.save();c.globalAlpha=r.alpha*(r.settled?.92:1);
@@ -245,7 +239,7 @@ function initAudio(){
 }
 function sound(type,x=player.x){
   if(!soundEnabled||!audioCtx||!audioMaster)return;
-  const now=audioCtx.currentTime,pan=audioCtx.createStereoPanner();pan.pan.value=clamp((x-viewX-W/2)/(W/2),-.7,.7);pan.connect(audioMaster);
+  const now=audioCtx.currentTime,pan=audioCtx.createStereoPanner();pan.pan.value=clamp((x-viewX-cameraWidth()/2)/(cameraWidth()/2),-.7,.7);pan.connect(audioMaster);
   let active=0;
   function finish(){if(--active===0)pan.disconnect();}
   function noise(duration,volume,frequency,filterType='lowpass',delay=0){
@@ -259,6 +253,8 @@ function sound(type,x=player.x){
   else if(type==='smg'){noise(.012,.35,2700,'highpass');noise(.065,.28,1900);tone(160,48,.095,.22,'triangle');noise(.12,.065,800,'lowpass',.025);}
   else if(type==='pistol'){noise(.016,.51,2400,'highpass');noise(.085,.35,1400);tone(148,45,.14,.3,'triangle');tone(85,34,.16,.16);noise(.23,.1,750,'lowpass',.026);noise(.018,.08,3700,'highpass',.038);}
   else if(type==='swing'){noise(.15,.1,950,'bandpass');noise(.065,.07,1900,'highpass',.045);}
+  else if(type==='heavySwing'){noise(.21,.16,620,'bandpass');noise(.09,.10,1350,'highpass',.045);}
+  else if(type==='meleeHeavy'){tone(82,24,.23,.25,'triangle');noise(.14,.12,260);}
   else if(type==='meleeHit'){noise(.023,.34,1450);noise(.12,.25,420);tone(118,30,.18,.31,'triangle');tone(280,95,.055,.075,'square');noise(.055,.13,2300,'highpass',.025);}
   else if(type==='growl'){noise(.32,.13,380);tone(78,48,.3,.12,'sawtooth');}
   else if(type==='acid'){noise(.2,.12,2100);tone(330,75,.16,.07,'triangle');}
@@ -266,6 +262,12 @@ function sound(type,x=player.x){
   else if(type==='headshot'){noise(.07,.3,2300);tone(210,60,.09,.18,'triangle');}
   else if(type==='fall'){noise(.12,.14,400);tone(75,35,.12,.1);}
   else if(type==='shell'){tone(2400,1300,.025,.012,'triangle');}
+  else if(type==='houseStep'){noise(.07,.045,400);tone(92,48,.055,.025,'triangle');}
+  else if(type==='houseDoor'){noise(.16,.055,670);tone(160,75,.15,.023,'triangle');}
+  else if(type==='houseDrag'){noise(.32,.085,450);noise(.09,.045,1500,'bandpass',.18);}
+  else if(type==='houseKnock'){noise(.07,.055,330);tone(95,45,.08,.04,'triangle');noise(.07,.035,290,'lowpass',.25);}
+  else if(type==='houseDrip'){tone(760,460,.045,.018,'sine');}
+  else if(type==='houseCreak'){tone(170,110,.21,.014,'triangle');noise(.16,.012,500);}
   else if(type==='step'){noise(.045,.018,500);}
   else if(type==='reload'||type==='rack'){noise(.035,.11,3000,'highpass');tone(900,300,.035,.035,'square');}
   else if(type==='pickup'){tone(620,900,.08,.04,'square');tone(920,1250,.1,.04,'square',.08);}

@@ -179,14 +179,15 @@ function drawUI(c,viewInfo){
 
   // Mission (top-center): wave, status chip, route
   const cx=Math.round(w/2);
-  cnText(c,'尸潮',cx-54,9,10,C.muted,'right');
-  pixelText(c,String(wave).padStart(2,'0'),cx-48,5,2,C.brass);
-  const status=HUD.waveStatus||'';const sw=Math.ceil(cnWidth(c,status,9))+10;
-  px(c,cx-20,5,sw,14,C.void);px(c,cx-19,6,sw-2,12,C.blood);cnText(c,status,cx-15,7,9,'#f6e9dc','left','bold',null);
-  cnText(c,'撤离路线',cx-60,20,9,C.muted);
+  const home=isHouseArea(area);
+  cnText(c,home?'住宅':'尸潮',cx-54,9,10,C.muted,'right');
+  pixelText(c,home?'17':String(wave).padStart(2,'0'),cx-48,5,2,C.brass);
+  const status=home?'搜寻线索':HUD.waveStatus||'';const sw=Math.ceil(cnWidth(c,status,9))+10;
+  px(c,cx-20,5,sw,14,C.void);px(c,cx-19,6,sw-2,12,home?'#4b6048':C.blood);cnText(c,status,cx-15,7,9,'#f6e9dc','left','bold',null);
+  cnText(c,home?'探索房间':'撤离路线',cx-60,20,9,C.muted);
   const meters=Math.floor(Math.max(0,Math.min(ROUTE_METERS,(furthestX-ROUTE_START)/10)));
-  pixelText(c,`${meters}/${ROUTE_METERS}M`,cx+60,22,1,C.route,C.void,'right');
-  barTrack(c,cx-60,31,120,3,null,(furthestX-ROUTE_START)/(EXTRACTION_X-ROUTE_START),C.route);
+  pixelText(c,home?`${houseState.visited.size}/8`:`${meters}/${ROUTE_METERS}M`,cx+60,22,1,C.route,C.void,'right');
+  barTrack(c,cx-60,31,120,3,null,home?houseState.visited.size/8:(furthestX-ROUTE_START)/(EXTRACTION_X-ROUTE_START),C.route);
   px(c,cx+60,29,1,7,C.brass);px(c,cx+61,29,3,3,C.brass);
 
   // Score (top-right) + system buttons
@@ -213,7 +214,7 @@ function drawUI(c,viewInfo){
 
   // Portal prompt: floats over the player's head when a door / junction is in reach.
   if(playing&&HUD.prompt){
-    const px0=Math.round(player.x-viewX),head=player.pose&&player.pose.head?player.pose.head.y:player.y-80,py=Math.round(head)-30+Math.round(Math.sin(worldTime*4)*1.5);
+    const head=player.pose&&player.pose.head?player.pose.head.y:player.y-80,anchor=worldToScreen(player.x,head),px0=Math.round(anchor.x),py=Math.round(anchor.y)-30+Math.round(Math.sin(worldTime*4)*1.5);
     const tw=Math.ceil(cnWidth(c,HUD.prompt,9))+(uiTouch?12:26),bx0=px0-Math.round(tw/2);
     plate(c,bx0,py,tw,15,C.plate,C.brass,C.brassDim);
     if(!uiTouch){px(c,bx0+4,py+3,9,9,C.brass);pixelText(c,'E',bx0+6,py+4,1,C.ink,null);cnText(c,HUD.prompt,bx0+18,py+3,9,C.text);}
@@ -269,6 +270,7 @@ function drawUI(c,viewInfo){
 
   // Mission board
   if(!playing)drawBoard(c,w,h);
+  if(typeof drawHouseUI==='function')drawHouseUI(c,w,h);
   c.restore();
 }
 
@@ -280,7 +282,7 @@ function wrapCn(c,text,size,maxWidth){
 function drawBoard(c,w,h){
   const C=UI_COLORS,p=HUD.panel;
   px(c,0,0,w,h,'rgba(11,12,9,.62)');
-  const bw=250,copyLines=wrapCn(c,p.copy||'',9,bw-24),bh=124+copyLines.length*12,bx=Math.round(w/2-bw/2),by=Math.round(h/2-bh/2);
+  const bw=250,copyLines=wrapCn(c,p.copy||'',9,bw-24),bh=180+copyLines.length*12,bx=Math.round(w/2-bw/2),by=Math.round(h/2-bh/2);
   plate(c,bx,by,bw,bh,C.plate);
   px(c,bx,by,bw,1,C.brass);
   px(c,bx+12,by+11,14,11,C.brass);pixelText(c,'LL',bx+13,by+13,1,C.ink,null);
@@ -296,4 +298,8 @@ function drawBoard(c,w,h){
   cnText(c,hint,bx+12,btnY+btnH+9,9,C.muted,'left','normal');
   cnText(c,'最佳击杀',bx+bw-12-pixelTextWidth(String(best).padStart(3,'0'),2)-5,btnY+3,9,C.muted,'right','normal');
   pixelText(c,String(best).padStart(3,'0'),bx+bw-12,btnY,2,C.brass,C.void,'right');
+  if(typeof drawHouseMenuEntry==='function')drawHouseMenuEntry(c,bx+12,by+bh-57,bw-24);
+  plate(c,bx+12,by+bh-25,bw-24,17,C.plateSoft);
+  cnText(c,'人物换装 / 动作测试',bx+bw/2,by+bh-22,10,C.brass,'center');
+  uiHit(bx+12,by+bh-25,bw-24,17,{down:()=>openWardrobe()});
 }

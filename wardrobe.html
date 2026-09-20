@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10130f">
+  <title>幸存者整备室 · 死线突围</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23d2d89a' d='M0 0h32v32H0z'/%3E%3Cpath fill='%23202719' d='M7 6h5v16h8v5H7zM19 6h5v11h-5z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="wardrobe.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="返回死线突围"><span class="brand-mark">L<span>／</span></span><span>死线突围<small>LAST LIGHT / ARMORY</small></span></a>
+    <span class="topbar-id">PERSONNEL EQUIPMENT · 001</span>
+    <a class="back-link" href="index.html">返回游戏 <span>↗</span></a>
+  </header>
+
+  <main class="workspace">
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow"><span class="status-dot"></span> SURVIVOR CUSTOMIZATION</p><h1 id="page-title">幸存者整备室<span>／</span></h1><p class="subtitle">穿过死线之前，先选好你的装备。</p></div>
+      <div class="save-group"><span id="save-state" class="save-state">正在读取装备…</span><button id="save" class="button-primary" type="button"><span>保存并应用游戏</span><span>↗</span></button></div>
+    </section>
+
+    <section class="preset-section" aria-label="整套搭配">
+      <div class="section-heading"><span>01 <b>整套搭配</b></span><small>从一套装备开始，再做你的选择</small></div>
+      <div id="preset-list" class="preset-list"></div>
+    </section>
+
+    <section class="workbench" aria-label="角色换装与动作测试">
+      <aside class="panel equipment-panel">
+        <div class="panel-heading"><h2><span>02</span> 装备部件</h2><span class="tiny-label">LOADOUT</span></div>
+        <div id="equipment-list" class="equipment-list"></div>
+        <div class="panel-foot"><span class="crosshair-icon">＋</span><p>装备只改变外观。<br>姿态与游戏中的角色保持一致。</p></div>
+      </aside>
+
+      <div class="preview-panel">
+        <div class="preview-top"><div><span class="tiny-label">LIVE PREVIEW</span><h2 id="outfit-name">经典幸存者</h2></div><span class="preview-badge"><i></i> 实时预览</span></div>
+        <div class="canvas-wrap"><canvas id="preview" width="480" height="390" tabindex="0" aria-label="当前装备角色动作预览"></canvas><span class="stage-corner corner-tl"></span><span class="stage-corner corner-tr"></span><span class="stage-corner corner-bl"></span><span class="stage-corner corner-br"></span><div class="stage-label"><span id="action-readout">待机 / IDLE</span><span>装备与动作实时同步</span></div></div>
+        <div class="preview-tools"><div class="direction-switch" role="group" aria-label="角色朝向"><button type="button" data-face="-1" aria-pressed="false" title="面向左侧">←</button><button type="button" data-face="1" class="selected" aria-pressed="true" title="面向右侧">→</button></div><label class="check-control"><input id="show-grid" type="checkbox" checked><span>网格</span></label><label class="check-control"><input id="show-bones" type="checkbox"><span>骨架</span></label><button id="export" class="text-button" type="button">导出 PNG <span>↓</span></button></div>
+        <div class="timeline-panel">
+          <div class="timeline-heading"><button id="play-pause" class="play-button" type="button" aria-label="暂停动作">Ⅱ</button><span id="timeline-label">待机循环</span><output id="time-readout">0.00 / 3.00 s</output><label class="speed-select"><span>速度</span><select id="speed" aria-label="动作播放速度"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label></div>
+          <input id="timeline" type="range" min="0" max="1000" step="1" value="0" aria-label="动作时间轴，拖动逐帧检查">
+          <div class="timeline-ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+          <div id="melee-phases" class="melee-phases" hidden aria-label="近战招式与有效挥击时间段"></div>
+        </div>
+      </div>
+
+      <aside class="panel detail-panel">
+        <div class="panel-heading"><h2><span>03</span> 细节与测试</h2><span class="tiny-label">DETAILS</span></div>
+        <div class="detail-section"><div class="subheading">装备配色 <span>COLOR PALETTE</span></div><div id="color-list" class="color-list"></div></div>
+        <div class="detail-section action-section"><div class="subheading">动作测试 <span>MOTION TEST</span></div><div id="action-list" class="action-list" role="group" aria-label="动作选择"></div><label class="weapon-label" for="weapon">手持武器</label><select id="weapon" class="weapon-select"></select>
+          <div id="melee-controls" class="melee-controls" hidden>
+            <label class="weapon-label" for="melee-move">近战招式 <span>MELEE SEQUENCE</span></label>
+            <select id="melee-move" class="weapon-select"><option value="combo">双连段 · 连续动作测试</option></select>
+            <div class="melee-step"><span id="melee-step-name">01 / 03 · 斜劈</span><output id="melee-phase">蓄力</output></div>
+          </div>
+          <div class="aim-control"><label for="aim-angle">瞄准角度</label><output id="aim-readout" for="aim-angle">0°</output><input id="aim-angle" type="range" min="-35" max="35" value="0" step="1" aria-label="瞄准角度，负数抬高，正数降低"><div class="aim-ticks"><span>−35° 抬高</span><span>0°</span><span>+35° 降低</span></div></div>
+          <p id="action-hint" class="action-hint">观察轮廓、站姿与装备的遮挡关系。</p></div>
+        <button id="reset" class="reset-button" type="button"><span>↺</span> 恢复经典装备</button>
+      </aside>
+    </section>
+    <footer class="workspace-footer"><span><i></i> 本地试装 · 保存后进入游戏生效</span><span>SPACE 暂停 / 继续 <b>·</b> ← → 逐帧检查</span></footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="arsenal.js"></script>
+  <script src="wardrobe.js"></script>
+  <script src="characters.js"></script>
+  <script src="wardrobe-preview.js"></script>
+</body>
+</html>
