@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>17号住宅 · 场景检视</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#15221e;color:#d8d9bb;font:14px system-ui,sans-serif}header,footer{max-width:1280px;margin:auto;padding:18px 20px}h1{font-size:22px;margin:5px 0 10px;font-weight:600}p{color:#a0b09b;line-height:1.7;margin:6px 0}nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}button,select{font:inherit;color:#d8d9bb;background:#314039;border:1px solid #536451;border-radius:4px;padding:9px 12px;cursor:pointer;touch-action:manipulation}button[aria-pressed="true"]{background:#687452;color:#f3efd8}main{max-width:1320px;margin:auto;background:#101c19}canvas{display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:pan-y}label{display:inline-flex;align-items:center;gap:8px;margin:6px 15px 6px 0}input[type=range]{width:min(65vw,420px);accent-color:#a7b18a}small{color:#a6b49f}a{color:#d2bf88}#time{font-variant-numeric:tabular-nums}details{line-height:1.7;margin-top:12px}
+</style>
+<header><small>LAST LIGHT / ENVIRONMENT STUDY</small><h1>17号住宅 · 门廊灯还亮着</h1><p>与游戏共用五个住宅绘制文件的场景检视页，不是完整战斗模式。门状态可切换；暂停后可逐时检查动态细节。</p><nav id="rooms" aria-label="房间选择"></nav></header>
+<main><canvas id="scene" width="640" height="330" aria-label="当前房间实时渲染"></canvas></main>
+<footer><div><button id="pause" type="button">暂停动画</button> <button id="doors" type="button">打开门窗</button> <label><input id="scale" type="checkbox">显示120px角色尺度标尺</label></div><label>镜头 <input id="camera" type="range" min="0" max="680" value="0" step="1"></label><br><label>时间 <input id="scrub" type="range" min="0" max="30" step="0.05" value="0"><span id="time">0.00s</span></label><details><summary>检视说明</summary>角色尺度标尺只是120px高的人形参考，不是游戏角色。此页未加载公路调色及全局灯光合成器；实际游戏亮度会有差别。系统启用“减少动态效果”时，住宅环境动画保持静止。<br>完整游戏：<a href="index.html">进入死线突围</a>，开始菜单选择“探索17号住宅”。</details></footer>
+<script src="house-data.js"></script><script src="house.js"></script><script src="house-ground.js"></script><script src="house-upper.js"></script><script src="house-wet.js"></script><script src="house-roof.js"></script>
+<script>
+'use strict';
+const canvas=document.querySelector('#scene'),ctx=canvas.getContext('2d');
+const slider=document.querySelector('#camera'),scrub=document.querySelector('#scrub'),pause=document.querySelector('#pause');
+let room='house_ground',elapsed=0,paused=false,last=0;
+const params=new URLSearchParams(location.search);
+if(HOUSE_ROOMS[params.get('room')])room=params.get('room');
+const names={house_ground:'一楼',house_landing:'二楼走廊',house_master:'主卧',house_child:'儿童房',house_wc:'卫生间',house_bath:'浴室',house_utility:'洗衣维修间',house_roof:'门廊屋顶'};
+for(const id of Object.keys(names)){const b=document.createElement('button');b.textContent=names[id];b.type='button';b.dataset.room=id;b.addEventListener('click',()=>selectRoom(id));document.querySelector('#rooms').append(b);}
+function selectRoom(id){room=id;canvas.width=Math.min(800,HOUSE_ROOMS[id].length);ctx.imageSmoothingEnabled=false;slider.max=Math.max(0,HOUSE_ROOMS[id].length-canvas.width);slider.value=0;slider.disabled=+slider.max===0;for(const b of document.querySelectorAll('[data-room]'))b.setAttribute('aria-pressed',String(b.dataset.room===id));render(elapsed);}
+function render(t){const camera=+slider.value;houseArt.draw(ctx,room,camera,t,canvas.width);
+  if(document.querySelector('#scale').checked){const K=houseArt.kit,x=Math.min(180,canvas.width/2),y=292;K.alpha(ctx,.68,()=>{K.shadow(ctx,x-14,y,28);K.px(ctx,x-7,y-120,14,17,'#e1d8b4');K.px(ctx,x-10,y-102,20,47,'#899f8e');K.line(ctx,x-7,y-56,x-11,y-2,'#bac4a9',6);K.line(ctx,x+7,y-56,x+12,y-2,'#bac4a9',6);K.line(ctx,x-11,y-96,x-18,y-58,'#c2c9ac',5);K.line(ctx,x+11,y-96,x+19,y-58,'#c2c9ac',5);K.line(ctx,x-31,y,x-31,y-120,'#d0bc86');K.text(ctx,'120px',x-65,y-58,'#e0d0a7',7);});}
+  houseArt.foreground(ctx,room,camera,t,canvas.width);houseArt.grade(ctx,room,canvas.width);
+  document.querySelector('#time').textContent=t.toFixed(2)+'s';
+}
+function frame(ms){if(!document.hidden&&!paused){elapsed+=Math.min(.05,(ms-last)/1000);scrub.value=elapsed%30;}last=ms;render(elapsed);requestAnimationFrame(frame);}
+pause.onclick=()=>{paused=!paused;pause.textContent=paused?'继续动画':'暂停动画';};
+document.querySelector('#doors').onclick=()=>{const open=!houseState.doors.miller_front;for(const r of Object.values(HOUSE_ROOMS))for(const p of r.exits)if(p.doorKey)houseState.doors[p.doorKey]=open;document.querySelector('#doors').textContent=open?'关闭门窗':'打开门窗';};
+scrub.oninput=()=>{paused=true;pause.textContent='继续动画';elapsed=+scrub.value;render(elapsed);};slider.oninput=()=>render(elapsed);
+window.housePreview={selectRoom,render,setTime(t){paused=true;elapsed=t;render(t);},get room(){return room;}};
+selectRoom(room);requestAnimationFrame(frame);
+</script>
+</html>
