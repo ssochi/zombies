@@ -1,0 +1,38 @@
+name: House review
+on:
+  push:
+    branches: [feat/apartment-visual-overhaul]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: house-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    if: github.event_name != 'pull_request' || github.head_ref != 'feat/apartment-visual-overhaul'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Package reproducible review source
+        run: |
+          mkdir -p review
+          git archive --format=zip -o review/source.zip HEAD '*.js' '*.html' '*.css' package.json scripts tests docs
+          git rev-parse HEAD > review/source-commit.txt
+      - name: Syntax and gameplay regression
+        run: |
+          npm run check
+          npm test
+          node --test tests/house-render.test.cjs
+      - name: Upload review build
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: house-review-${{ github.sha }}
+          path: review/
+          retention-days: 7
+          if-no-files-found: error
